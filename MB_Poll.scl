@@ -1,0 +1,125 @@
+TYPE "MB_S"
+    STRUCT
+        Address : BYTE;    //子站地址，当地址为0时代表不轮询。
+        MFunction : BYTE;    //modbus 功能号
+        StartAddress : WORD;    //起始地址
+        Number : WORD;    //长度
+        CRC : WORD;    //CRC
+        recvDB : INT;    //接收DB块号
+        recvDBB : INT;    //接收DB起始地址
+    END_STRUCT
+END_TYPE
+
+FUNCTION_BLOCK "MB_Poll"
+
+    VAR_INPUT 
+        Laddr : INT; // 模块地址
+        Poll_DB : INT; // 轮询DB号
+        Poll_List: ARRAY[0..31] OF MB_S; //轮询列表
+        overTime : TIME := T#2S;   // 等待时间 (单位毫秒) 
+    END_VAR
+
+    VAR_OUTPUT
+    END_VAR
+
+    VAR_IN_OUT
+        outerTrigger : BOOL; // 默认为false,即顺序轮询。当本参数为true时，由外部定义轮询方式，比如1秒周期。
+        trigger : BOOL; // 当outerTrigger置位时，本参数上升沿进行发出当次轮询
+        sendDB : INT;    
+        sendDBB : INT;    
+        recvDB : INT;    
+        recvDBB : INT;   
+    END_VAR
+
+    VAR
+        Index : INT ; // 第几轮
+        roundWorking : BOOL; // 当前轮询进行中
+        CP_SND_IDB : P_SND_RK;
+        CP_RCV_IDB : P_RCV_RK;
+        TimeOver : TON;
+        sendPulse : TP;
+    END_VAR
+
+    VAR_TEMP
+    END_VAR
+
+
+BEGIN
+    // 范围检查
+    IF Index < 0 OR Index > 31 THEN
+        Index := 0;
+    END_IF;
+    // 忽略子站地址为0的轮询
+    WHILE Index >= 0 AND Index < 32 AND Poll_List[Index].Address = 0 DO
+        Index := Index + 1;
+    END_WHILE;
+    IF Index = 32 THEN
+        RETURN;
+    END_IF;
+    
+    // 准备发送接收参数
+    sendDB := Poll_DB;
+    sendDBB := Index * 12 + 4;
+    recvDB := Poll_List[Index].recvDB;
+    recvDBB := Poll_List[Index].recvDBB;
+
+    // 发送数据
+    CP_SND_IDB (
+           SF                       := 'S',
+           REQ                      := trigger,
+           LADDR                    := Laddr,
+           DB_NO                    := sendDB,
+           DBB_NO                   := sendDBB,
+           LEN                      := 8,
+           R_TYP                    := 'X');
+    IF NOT outerTrigger AND (CP_SND_IDB.DONE OR CP_SND_IDB.ERROR) THEN
+        trigger := FALSE; //取消触发
+    END_IF;
+
+    //接收功能
+    CP_RCV_IDB (
+           EN_R                     := TRUE,
+           LADDR                    := Laddr,
+           DB_NO                    := recvDB,
+           DBB_NO                   := recvDBB);
+    //CP_RCV_IDB.NDR
+
+    // 启动超时
+    TimeOver(
+           IN := roundWorking,
+           PT := overTime);
+
+    // 处理 roundWorking
+    IF outerTrigger THEN
+        // 在 trigger 下降沿计数增加
+        IF roundWorking AND NOT trigger THEN
+            Index := Index + 1;
+        END_IF;
+        roundWorking := trigger;
+    ELSE
+        IF CP_RCV_IDB.NDR OR TimeOver.Q THEN
+            // 当前轮询结束，计数增加
+            Index := Index + 1; 
+            roundWorking := FALSE; 
+        ELSE
+            // 启动新一轮
+            IF NOT roundWorking THEN
+                roundWorking := TRUE;
+                trigger := FALSE; // roundWorking 上升沿的下一个周期自动重新触发
+            ELSIF NOT trigger THEN
+                trigger := TRUE;
+            END_IF;
+        END_IF;
+    END_IF;
+
+    // 接收成功时处理
+    IF CP_RCV_IDB.NDR THEN
+        OnRecv(
+            RecvDB := recvDB,
+            RecvDBB := recvDBB,
+            LEN := 0);
+    END_IF;
+
+END_FUNCTION_BLOCK
+
+
