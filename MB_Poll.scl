@@ -1,30 +1,26 @@
-TYPE "MB_S"
-    STRUCT
-        Address : BYTE;    //å­ç«™åœ°å€ï¼Œå½“åœ°å€ä¸º0æ—¶ä»£è¡¨ä¸è½®è¯¢ã€‚
-        MFunction : BYTE;    //modbus åŠŸèƒ½å·
-        StartAddress : WORD;    //èµ·å§‹åœ°å€
-        Number : WORD;    //é•¿åº¦
-        CRC : WORD;    //CRC
-        recvDB : INT;    //æŽ¥æ”¶DBå—å·
-        recvDBB : INT;    //æŽ¥æ”¶DBèµ·å§‹åœ°å€
-    END_STRUCT
-END_TYPE
-
 FUNCTION_BLOCK "MB_Poll"
 
     VAR_INPUT 
-        customTrigger : BOOL; //é»˜è®¤ä¸ºfalse,å³é¡ºåºè½®è¯¢ã€‚å½“æœ¬å‚æ•°ä¸ºtrueæ—¶ï¼Œç”±å‚æ•°Rå®šä¹‰è½®è¯¢æ–¹å¼ã€‚
-        R : BOOL; // å½“customTriggerç½®ä½æ—¶èµ·ä½œç”¨ï¼Œåœ¨Rçš„ä¸Šå‡æ²¿å‘å‡ºå½“æ¬¡è½®è¯¢ã€‚æ¯”å¦‚å¯ä»¥æŠŠä¸€ä¸ªç§’è„‰å†²èµ‹å€¼ç»™R
-        Laddr : INT; // æ¨¡å—åœ°å€
-        Poll_DB : INT; // è½®è¯¢DBå·
-        overTime : TIME := T#2S;   // å•æ¬¡è¯¢é—®çš„æœ€å¤§ç­‰å¾…æ—¶é—´ 
+        customTrigger : BOOL; //Ä¬ÈÏÎªfalse,¼´Ë³ÐòÂÖÑ¯¡£µ±±¾²ÎÊýÎªtrueÊ±£¬ÓÉ²ÎÊýR¶¨ÒåÂÖÑ¯·½Ê½¡£
+        R : BOOL; // µ±customTriggerÖÃÎ»Ê±Æð×÷ÓÃ£¬ÔÚRµÄÉÏÉýÑØ·¢³öµ±´ÎÂÖÑ¯¡£±ÈÈç¿ÉÒÔ°ÑÒ»¸öÃëÂö³å¸³Öµ¸øR
+        Laddr : INT; // Ä£¿éµØÖ·
+        Poll_DB : INT; // ÂÖÑ¯DBºÅ
+        overTime : TIME := T#2S;   // µ¥´ÎÑ¯ÎÊµÄ×î´óµÈ´ýÊ±¼ä 
     END_VAR
 
     VAR
-        trigger : BOOL; // å†…éƒ¨æŽ§åˆ¶CP341å‘é€
-        roundWorking : BOOL; // å½“å‰è½®è¯¢è¿›è¡Œä¸­
-        Poll : MB_S;
-        Index : INT ; // ç¬¬å‡ è½®
+        trigger : BOOL; // ÄÚ²¿¿ØÖÆCP341·¢ËÍ
+        roundWorking : BOOL; // µ±Ç°ÂÖÑ¯½øÐÐÖÐ
+        Poll : STRUCT
+            Address : BYTE;    //×ÓÕ¾µØÖ·£¬µ±µØÖ·Îª0Ê±´ú±í²»ÂÖÑ¯¡£
+            MFunction : BYTE;    //modbus ¹¦ÄÜºÅ
+            StartAddress : WORD;    //ÆðÊ¼µØÖ·
+            Number : WORD;    //³¤¶È
+            CRC : WORD;    //CRC
+            recvDB : INT;    //½ÓÊÕDB¿éºÅ
+            recvDBB : INT;    //½ÓÊÕDBÆðÊ¼µØÖ·
+        END_STRUCT;
+        Index : INT ; // µÚ¼¸ÂÖ
         sendDBB : INT;    
         recvDB : INT;    
         recvDBB : INT;   
@@ -39,15 +35,15 @@ FUNCTION_BLOCK "MB_Poll"
 
 
 BEGIN
-    // èŒƒå›´æ£€æŸ¥
+    // ·¶Î§¼ì²é
     IF Index < 0 OR Index > 31 THEN
         Index := 0;
     END_IF;
     
-    // å‘é€å‚æ•°
+    // ·¢ËÍ²ÎÊý
     DB_NO := INT_TO_WORD(Poll_DB);
     sendDBB := Index * 12;
-    // å¿½ç•¥å­ç«™åœ°å€ä¸º0çš„è½®è¯¢
+    // ºöÂÔ×ÓÕ¾µØÖ·Îª0µÄÂÖÑ¯
     WHILE Index >= 0 AND Index < 32 AND WORD_TO_BLOCK_DB(DB_NO).DB[sendDBB] = B#16#0 DO
         Index := Index + 1;
     END_WHILE;
@@ -55,13 +51,13 @@ BEGIN
         RETURN;
     END_IF;
     
-    // æŽ¥æ”¶å‚æ•°
+    // ½ÓÊÕ²ÎÊý
     recvDB := WORD_TO_INT(WORD_TO_BLOCK_DB(DB_NO).DW[Index*12+8]);
     recvDBB := WORD_TO_INT(WORD_TO_BLOCK_DB(DB_NO).DW[Index*12+10]);
     
-    // to-do: å†™å…¥CRC16
+    // to-do: Ð´ÈëCRC16
 
-    // å‘é€æ•°æ®
+    // ·¢ËÍÊý¾Ý
     CP_SND_IDB (
            SF                       := 'S',
            REQ                      := trigger,
@@ -71,10 +67,10 @@ BEGIN
            LEN                      := 8,
            R_TYP                    := 'X');
     IF CP_SND_IDB.DONE OR CP_SND_IDB.ERROR THEN
-        trigger := FALSE; //å–æ¶ˆè§¦å‘
+        trigger := FALSE; //È¡Ïû´¥·¢
     END_IF;
 
-    //æŽ¥æ”¶åŠŸèƒ½
+    //½ÓÊÕ¹¦ÄÜ
     CP_RCV_IDB (
            EN_R                     := TRUE,
            LADDR                    := Laddr,
@@ -82,12 +78,12 @@ BEGIN
            DBB_NO                   := recvDBB);
     //CP_RCV_IDB.NDR
 
-    // å¯åŠ¨è¶…æ—¶
+    // Æô¶¯³¬Ê±
     TimeOver(
            IN := roundWorking,
            PT := overTime);
 
-    // å¤„ç† roundWorking
+    // ´¦Àí roundWorking
     IF customTrigger THEN
         IF NOT R THEN 
             // -R
@@ -95,25 +91,25 @@ BEGIN
             roundWorking := FALSE;
         ELSIF NOT roundWorking THEN 
             // R & -roundWorking
-            // åœ¨ R ä¸Šå‡æ²¿å¯åŠ¨æ–°ä¸€è½®è®¡æ•°å¢žåŠ 
+            // ÔÚ R ÉÏÉýÑØÆô¶¯ÐÂÒ»ÂÖ¼ÆÊýÔö¼Ó
             Index := Index + 1;
             roundWorking := TRUE;
             trigger := TRUE;
         END_IF;
     ELSE
         IF CP_RCV_IDB.NDR OR TimeOver.Q THEN
-            // å½“å‰è¯¢é—®ç»“æŸï¼Œè®¡æ•°å¢žåŠ 
+            // µ±Ç°Ñ¯ÎÊ½áÊø£¬¼ÆÊýÔö¼Ó
             Index := Index + 1; 
             roundWorking := FALSE; 
             trigger := FALSE;
         ELSIF NOT roundWorking THEN
-            // å¯åŠ¨æ–°ä¸€è½®
+            // Æô¶¯ÐÂÒ»ÂÖ
             roundWorking := TRUE;
             trigger := TRUE;
         END_IF;
     END_IF;
 
-    // æŽ¥æ”¶æˆåŠŸæ—¶å¤„ç†
+    // ½ÓÊÕ³É¹¦Ê±´¦Àí
     IF CP_RCV_IDB.NDR THEN
         OnRecv(
             RecvDB := recvDB,
@@ -122,4 +118,3 @@ BEGIN
     END_IF;
 
 END_FUNCTION_BLOCK
-

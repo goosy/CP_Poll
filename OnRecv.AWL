@@ -1,0 +1,23 @@
+FUNCTION "OnRecv" : VOID
+TITLE =收到数据后处理转移
+//input #RecvDB 当前已接收数据块号
+//input #RecvDBB 当前已接收数据开始地址
+//input #Len 接收长度（本FC无效）
+
+VERSION : 0.1
+
+VAR_INPUT
+  RecvDB : INT ;	
+  RecvDBB : INT ;	
+  Len : INT ;	
+END_VAR
+VAR_TEMP
+  tempRecvDB : INT ;	
+END_VAR
+
+BEGIN
+
+NETWORK
+TITLE =
+
+END_FUNCTION
