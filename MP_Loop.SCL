@@ -1,0 +1,67 @@
+// 接收DB块 可定义多个
+DATA_BLOCK DB51 
+  STRUCT    
+   buff : ARRAY  [0 .. 499 ] OF BYTE ;   
+  END_STRUCT ; 
+BEGIN
+END_DATA_BLOCK
+
+//轮询DB块，含modbus发送指令，List为一个341模块的轮询序列，多个341可以定义多个List
+DATA_BLOCK "CP01_Poll" 
+    STRUCT
+        List0: ARRAY[1..2] OF  //modbus发送命令
+        STRUCT
+            Address : BYTE;    //子站地址
+            MFunction : BYTE;    //modbus 功能号
+            StartAddress : WORD;    //起始地址
+            Number : WORD;    //长度
+            CRC : WORD;    //CRC
+            recvDB : INT;    //接收DB块号
+            recvDBB : INT;    //接收DB起始地址
+        END_STRUCT;
+        List1: ARRAY[0..2] OF  //modbus发送命令
+        STRUCT
+            Address : BYTE;    //子站地址
+            MFunction : BYTE;    //modbus 功能号
+            StartAddress : WORD;    //起始地址
+            Number : WORD;    //长度
+            CRC : WORD;    //CRC
+            recvDB : INT;    //接收DB块号
+            recvDBB : INT;    //接收DB起始地址
+        END_STRUCT;
+    END_STRUCT
+BEGIN
+   List1[0].Address := B#16#1; 
+   List1[0].MFunction := B#16#1; 
+   List1[0].StartAddress := W#16#4000; 
+   List1[0].Number := W#16#C; 
+   List1[0].CRC := W#16#29CF; 
+   List1[0].recvDB := 51; 
+   List1[0].recvDBB := 0; 
+   List1[1].Address := B#16#1; 
+   List1[1].MFunction := B#16#1; 
+   List1[1].StartAddress := W#16#4800; 
+   List1[1].Number := W#16#C; 
+   List1[1].CRC := W#16#2BAF; 
+   List1[1].recvDB := 51; 
+   List1[1].recvDBB := 20; 
+   List1[2].Address := B#16#2; 
+   List1[2].MFunction := B#16#4; 
+   List1[2].StartAddress := W#16#4800; 
+   List1[2].Number := W#16#C; 
+   List1[2].CRC := W#16#2BAF; 
+   List1[2].recvDB := 51; 
+   List1[2].recvDBB := 30; 
+END_DATA_BLOCK
+
+FUNCTION "C485_Loop" : VOID
+
+VAR_TEMP
+END_VAR
+
+"MB_Poll"."CP01"(
+    Laddr := 752,
+    DATA := "CP01_Poll".List1);
+
+END_FUNCTION
+

@@ -1,115 +1,119 @@
 FUNCTION_BLOCK "MB_Poll"
 
     VAR_INPUT 
-        customTrigger : BOOL; //Ä¬ÈÏÎªfalse,¼´Ë³ĞòÂÖÑ¯¡£µ±±¾²ÎÊıÎªtrueÊ±£¬ÓÉ²ÎÊıR¶¨ÒåÂÖÑ¯·½Ê½¡£
-        R : BOOL; // µ±customTriggerÖÃÎ»Ê±Æğ×÷ÓÃ£¬ÔÚRµÄÉÏÉıÑØ·¢³öµ±´ÎÂÖÑ¯¡£±ÈÈç¿ÉÒÔ°ÑÒ»¸öÃëÂö³å¸³Öµ¸øR
-        Laddr : INT; // Ä£¿éµØÖ·
-        Poll_DB : INT; // ÂÖÑ¯DBºÅ
-        overTime : TIME := T#2S;   // µ¥´ÎÑ¯ÎÊµÄ×î´óµÈ´ıÊ±¼ä 
+        customTrigger : BOOL ; //é»˜è®¤ä¸ºfalse,å³é¡ºåºè½®è¯¢ã€‚å½“æœ¬å‚æ•°ä¸ºtrueæ—¶ï¼Œç”±å‚æ•°Rå®šä¹‰è½®è¯¢æ–¹å¼ã€‚
+        R : BOOL ; // å½“customTriggerç½®ä½æ—¶èµ·ä½œç”¨ï¼Œåœ¨Rçš„ä¸Šå‡æ²¿å‘å‡ºå½“æ¬¡è½®è¯¢ã€‚æ¯”å¦‚å¯ä»¥æŠŠä¸€ä¸ªç§’è„‰å†²èµ‹å€¼ç»™R
+        Laddr : INT ; // æ¨¡å—åœ°å€
+        overTime : TIME := T#2S;   // å•æ¬¡è¯¢é—®çš„æœ€å¤§ç­‰å¾…æ—¶é—´ 
+        DATA : ANY ; // è½®è¯¢å®šä¹‰ç³»åˆ—æ•°æ®åŒº
+        Pointer_S AT DATA : STRUCT  // Define ANY structure
+            SyntaxID: BYTE ;  
+            DataType: BYTE ;
+            DataCount: WORD ;
+            DB_Nummer: WORD ;
+            Byte_Pointer: DWORD ;
+        END_STRUCT ;
+    END_VAR
+
+    VAR_IN_OUT
     END_VAR
 
     VAR
-        trigger : BOOL; // ÄÚ²¿¿ØÖÆCP341·¢ËÍ
-        roundWorking : BOOL; // µ±Ç°ÂÖÑ¯½øĞĞÖĞ
-        Poll : STRUCT
-            Address : BYTE;    //×ÓÕ¾µØÖ·£¬µ±µØÖ·Îª0Ê±´ú±í²»ÂÖÑ¯¡£
-            MFunction : BYTE;    //modbus ¹¦ÄÜºÅ
-            StartAddress : WORD;    //ÆğÊ¼µØÖ·
-            Number : WORD;    //³¤¶È
-            CRC : WORD;    //CRC
-            recvDB : INT;    //½ÓÊÕDB¿éºÅ
-            recvDBB : INT;    //½ÓÊÕDBÆğÊ¼µØÖ·
-        END_STRUCT;
-        Index : INT ; // µÚ¼¸ÂÖ
+        trigger : BOOL; // å†…éƒ¨æ§åˆ¶CP341å‘é€
+        transmitting : BOOL; // å½“å‰è½®è¯¢è¿›è¡Œä¸­
+        initialized : BOOL ; // è¾“å…¥å·²åˆå§‹åŒ–
+        Index : INT ; // ç¬¬å‡ è½®
+        baseOffset : INT ;
+        transLength : INT ;
+        Poll_DB : INT; // è½®è¯¢DBå·
         sendDBB : INT;    
-        recvDB : INT;    
-        recvDBB : INT;   
+        recvDB : INT ;    //æ¥æ”¶DBå—å·
+        recvDBB : INT ;    //æ¥æ”¶DBèµ·å§‹åœ°å€
         CP_SND_IDB : P_SND_RK;
         CP_RCV_IDB : P_RCV_RK;
         TimeOver : TON;
     END_VAR
 
-    VAR_TEMP
-        DB_NO : WORD;
-    END_VAR
-
 
 BEGIN
-    // ·¶Î§¼ì²é
-    IF Index < 0 OR Index > 31 THEN
+
+    IF NOT initialized THEN
+        IF (Pointer_S.DB_Nummer = 0) 
+            OR (Pointer_S.DataType <> B#16#2)
+            OR ((Pointer_S.Byte_Pointer AND DW#16#ff000000) <> DW#16#84000000) THEN
+            RETURN;    
+        END_IF;    
+        Poll_DB := WORD_TO_INT(Pointer_S.DB_Nummer);
+        baseOffset := DWORD_TO_INT(SHR(IN := Pointer_S.Byte_Pointer, N := 3));
+        transLength := WORD_TO_INT(Pointer_S.DataCount)/12;
+        initialized := TRUE;
+    END_IF;
+
+    // èŒƒå›´æ£€æŸ¥
+    IF Index < 0 OR Index >= transLength THEN
         Index := 0;
     END_IF;
     
-    // ·¢ËÍ²ÎÊı
-    DB_NO := INT_TO_WORD(Poll_DB);
-    sendDBB := Index * 12;
-    // ºöÂÔ×ÓÕ¾µØÖ·Îª0µÄÂÖÑ¯
-    WHILE Index >= 0 AND Index < 32 AND WORD_TO_BLOCK_DB(DB_NO).DB[sendDBB] = B#16#0 DO
-        Index := Index + 1;
-    END_WHILE;
-    IF Index = 32 THEN
-        RETURN;
-    END_IF;
+    // å‘é€å‚æ•°
+    sendDBB := Index * 12 + baseOffset;
+    // æ¥æ”¶å‚æ•°
+    recvDB := WORD_TO_INT(WORD_TO_BLOCK_DB(Pointer_S.DB_Nummer).DW[sendDBB+8]);
+    recvDBB := WORD_TO_INT(WORD_TO_BLOCK_DB(Pointer_S.DB_Nummer).DW[sendDBB+10]);
     
-    // ½ÓÊÕ²ÎÊı
-    recvDB := WORD_TO_INT(WORD_TO_BLOCK_DB(DB_NO).DW[Index*12+8]);
-    recvDBB := WORD_TO_INT(WORD_TO_BLOCK_DB(DB_NO).DW[Index*12+10]);
-    
-    // to-do: Ğ´ÈëCRC16
+    // to-do: å†™å…¥CRC16
 
-    // ·¢ËÍÊı¾İ
+    // å‘é€æ•°æ®
     CP_SND_IDB (
-           SF                       := 'S',
-           REQ                      := trigger,
-           LADDR                    := Laddr,
-           DB_NO                    := Poll_DB,
-           DBB_NO                   := sendDBB,
-           LEN                      := 8,
-           R_TYP                    := 'X');
+        SF                       := 'S',
+        REQ                      := trigger,
+        LADDR                    := Laddr,
+        DB_NO                    := Poll_DB,
+        DBB_NO                   := sendDBB,
+        LEN                      := 8,
+        R_TYP                    := 'X');
     IF CP_SND_IDB.DONE OR CP_SND_IDB.ERROR THEN
-        trigger := FALSE; //È¡Ïû´¥·¢
+        trigger := FALSE; //å–æ¶ˆè§¦å‘
     END_IF;
 
-    //½ÓÊÕ¹¦ÄÜ
+    //æ¥æ”¶åŠŸèƒ½
     CP_RCV_IDB (
-           EN_R                     := TRUE,
-           LADDR                    := Laddr,
-           DB_NO                    := recvDB,
-           DBB_NO                   := recvDBB);
-    //CP_RCV_IDB.NDR
+        EN_R                     := TRUE,
+        LADDR                    := Laddr,
+        DB_NO                    := recvDB,
+        DBB_NO                   := recvDBB);
 
-    // Æô¶¯³¬Ê±
+    // å¯åŠ¨è¶…æ—¶
     TimeOver(
-           IN := roundWorking,
+           IN := transmitting,
            PT := overTime);
 
-    // ´¦Àí roundWorking
+    // å¤„ç† transmitting
     IF customTrigger THEN
         IF NOT R THEN 
             // -R
             trigger := FALSE;
-            roundWorking := FALSE;
-        ELSIF NOT roundWorking THEN 
-            // R & -roundWorking
-            // ÔÚ R ÉÏÉıÑØÆô¶¯ĞÂÒ»ÂÖ¼ÆÊıÔö¼Ó
+            transmitting := FALSE;
+        ELSIF NOT transmitting THEN 
+            // R & -transmitting
+            // åœ¨ R ä¸Šå‡æ²¿å¯åŠ¨æ–°ä¸€è½®è®¡æ•°å¢åŠ 
             Index := Index + 1;
-            roundWorking := TRUE;
+            transmitting := TRUE;
             trigger := TRUE;
         END_IF;
     ELSE
         IF CP_RCV_IDB.NDR OR TimeOver.Q THEN
-            // µ±Ç°Ñ¯ÎÊ½áÊø£¬¼ÆÊıÔö¼Ó
+            // å½“å‰è¯¢é—®ç»“æŸï¼Œè®¡æ•°å¢åŠ 
             Index := Index + 1; 
-            roundWorking := FALSE; 
+            transmitting := FALSE; 
             trigger := FALSE;
-        ELSIF NOT roundWorking THEN
-            // Æô¶¯ĞÂÒ»ÂÖ
-            roundWorking := TRUE;
+        ELSIF NOT transmitting THEN
+            // å¯åŠ¨æ–°ä¸€è½®
+            transmitting := TRUE;
             trigger := TRUE;
         END_IF;
     END_IF;
 
-    // ½ÓÊÕ³É¹¦Ê±´¦Àí
+    // æ¥æ”¶æˆåŠŸæ—¶å¤„ç†
     IF CP_RCV_IDB.NDR THEN
         OnRecv(
             RecvDB := recvDB,
@@ -118,3 +122,4 @@ BEGIN
     END_IF;
 
 END_FUNCTION_BLOCK
+
