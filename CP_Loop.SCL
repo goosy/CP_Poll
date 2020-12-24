@@ -1,0 +1,82 @@
+// 接收DB块 可定义多个
+DATA_BLOCK DB55 
+    STRUCT    
+       buff : ARRAY  [0 .. 299 ] OF BYTE ;   
+    END_STRUCT ; 
+BEGIN
+END_DATA_BLOCK
+
+//轮询DB块，含485发送指令，List为一个341模块的轮询序列，多个341可以定义多个List
+DATA_BLOCK "PollList" 
+    STRUCT
+        List: STRUCT //modbus发送命令
+            next0 : INT;    //下一轮询偏移量，最后一个轮询应置为0重新回到第1个
+            length0 : INT := 8;    //发送长度
+            recvDB0 : INT;    //接收DB块号
+            recvDBB0 : INT;    //接收DB起始地址
+            sendData0 : ARRAY[0..7] OF  //发送数据
+            BYTE;
+            next1 : INT;    //下一轮询偏移量，最后一个轮询应置为0重新回到第1个
+            length1 : INT := 7;    //发送长度
+            recvDB1 : INT;    //接收DB块号
+            recvDBB1 : INT;    //接收DB起始地址
+            sendData1 : ARRAY[0..6] OF  //发送数据
+            BYTE;
+            next2 : INT;    //下一轮询偏移量，最后一个轮询应置为0重新回到第1个
+            length2 : INT := 7;    //发送长度
+            recvDB2 : INT;    //接收DB块号
+            recvDBB2 : INT;    //接收DB起始地址
+            sendData2 : ARRAY[0..6] OF  //发送数据
+            BYTE;
+        END_STRUCT;
+    END_STRUCT
+BEGIN
+    List.next0 := 16; 
+    List.recvDB0 := 55; 
+    List.recvDBB0 := 1; 
+    List.length0 := 8; 
+    List.sendData0[0] := B#16#01; 
+    List.sendData0[1] := B#16#03; 
+    List.sendData0[2] := B#16#00; 
+    List.sendData0[3] := B#16#01; 
+    List.sendData0[4] := B#16#00; 
+    List.sendData0[5] := B#16#0C; 
+    List.sendData0[6] := B#16#14; 
+    List.sendData0[7] := B#16#0F; 
+    List.next1 := 32; 
+    List.recvDB1 := 55; 
+    List.recvDBB1 := 33; 
+    List.length1 := 7; 
+    List.sendData1[0] := B#16#2; 
+    List.sendData1[1] := B#16#3; 
+    List.sendData1[2] := B#16#00; 
+    List.sendData1[3] := B#16#00; 
+    List.sendData1[4] := B#16#18; 
+    List.sendData1[5] := B#16#8E; 
+    List.sendData1[6] := B#16#5D; 
+    List.next2 := 0; 
+    List.recvDB2 := 55; 
+    List.recvDBB2 := 65; 
+    List.length2 := 7; 
+    List.sendData2[0] := B#16#3; 
+    List.sendData2[1] := B#16#3; 
+    List.sendData2[2] := B#16#00; 
+    List.sendData2[3] := B#16#00; 
+    List.sendData2[4] := B#16#18; 
+    List.sendData2[5] := B#16#4E; 
+    List.sendData2[6] := B#16#60; 
+END_DATA_BLOCK
+
+FUNCTION "CP_Loop" : VOID
+
+VAR_TEMP
+END_VAR
+
+"CP_Poll"."CP01"(
+    Laddr := 752,
+    DATA := "PollList".List);
+
+END_FUNCTION
+
+
+

@@ -1,0 +1,27 @@
+FUNCTION "CP_C_Loop" : VOID
+TITLE =
+VERSION : 0.1
+
+BEGIN
+NETWORK
+TITLE =
+
+      AN    M      1.0; 
+      S     M      1.0; 
+NETWORK
+TITLE =
+//自定义发送周期
+      A     M      1.0; 
+      =     L      0.0; 
+      BLD   103; 
+      A     M      0.5; 
+      =     L      0.1; 
+      BLD   103; 
+      CALL "CP_Poll" , "CP01" (
+           customTrigger            := L      0.0,
+           R                        := L      0.1,
+           Laddr                    := 752,
+           DATA                     := "PollList".List);
+      NOP   0; 
+END_FUNCTION
+
