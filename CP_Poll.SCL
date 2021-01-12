@@ -1,15 +1,22 @@
 FUNCTION_BLOCK "CP_Poll"
+TITLE='485轮询'
+VERSION:'0.10'
+KNOW_HOW_PROTECT
+AUTHOR:Goosy
+NAME:SC
+FAMILY:CP
 
 VAR_INPUT 
     customTrigger : BOOL ; //默认为false,即顺序轮询。当本参数为true时，由参数R定义轮询方式。
     R : BOOL ; // 当customTrigger置位时起作用，在R的上升沿发出当次轮询。比如可以把一个秒脉冲赋值给R
     Laddr : INT ; // 模块地址
-    overTime : TIME := T#2S;   // 单次询问的最大等待时间 
+    timeout : TIME := T#2S;   // 单次询问的最大等待时间 
+    overTimes : INT := 3; // 单次询问的回应时间大于一个轮询周期的 overTimes 倍，判定超时，标记该设备数据无效
     DATA : ANY ; // 轮询定义系列数据区
     Pointer_S AT DATA : STRUCT  // Define ANY structure
         SyntaxID: BYTE ;  
         DataType: BYTE ;
-        DataCount: WORD ;
+        DataCount: INT ;
         DB_Nummer: WORD ;
         Byte_Pointer: DWORD ;
     END_STRUCT ;
@@ -22,20 +29,29 @@ VAR
     trigger : BOOL; // 内部控制CP341发送
     transmitting : BOOL; // 当前轮询进行中
     initialized : BOOL ; // 输入已初始化
-    Index : INT ; // 第几轮
     baseOffset : INT ;
     transLength : INT ;
+    index : INT ; // 第几轮
     Poll_DB : INT; // 轮询DB号
-    sendDBB : INT;    
-    sendLen : INT ;
-    recvDB : INT ;    //接收DB块号
-    recvDBB : INT ;    //接收DB起始地址
     CP_SND_IDB : P_SND_RK;
     CP_RCV_IDB : P_RCV_RK;
     TimeOver : TON;
+    pollList : ARRAY [0..31] OF //轮询定义
+    STRUCT
+        sendDBB : INT ;
+        length : INT ;
+        recvDB : INT ;
+        recvDBB : INT ;
+        waitCount : INT ;
+    END_STRUCT ;
 END_VAR
 
 VAR_TEMP
+    w_PollDB : WORD ;
+    recvDB : INT ;
+    recvDBB : INT ;
+    currOffset : INT ; // 当前轮询的偏移
+    next : INT ;
 END_VAR
 
 
@@ -46,24 +62,41 @@ BEGIN
             OR (Pointer_S.DataType <> B#16#2)
             OR ((Pointer_S.Byte_Pointer AND DW#16#ff000000) <> DW#16#84000000) THEN
             RETURN;    
-        END_IF;    
-        Poll_DB := WORD_TO_INT(Pointer_S.DB_Nummer);
+        END_IF;
+        w_PollDB := Pointer_S.DB_Nummer;
+        Poll_DB := WORD_TO_INT(w_PollDB);
         baseOffset := DWORD_TO_INT(SHR(IN := Pointer_S.Byte_Pointer, N := 3));
-        transLength := WORD_TO_INT(Pointer_S.DataCount);
+        index := 0;
+        currOffset := baseOffset;
+        REPEAT
+            // current
+            pollList[index].sendDBB := currOffset + 8;
+            next := WORD_TO_INT(WORD_TO_BLOCK_DB(w_PollDB).DW[currOffset]);
+            pollList[index].length := WORD_TO_INT(WORD_TO_BLOCK_DB(w_PollDB).DW[currOffset + 2]);
+            pollList[index].recvDB := WORD_TO_INT(WORD_TO_BLOCK_DB(w_PollDB).DW[currOffset + 4]);
+            pollList[index].recvDBB := WORD_TO_INT(WORD_TO_BLOCK_DB(w_PollDB).DW[currOffset + 6]);
+            pollList[index].waitCount := 0;
+
+            // next
+            currOffset := currOffset + next; 
+            // 范围检查
+            IF next <= 8 OR currOffset >= baseOffset + Pointer_S.DataCount - 8 THEN
+                currOffset := baseOffset;
+                transLength := index + 1;
+            ELSE
+                index := index + 1;
+            END_IF;
+        UNTIL currOffset = baseOffset
+        END_REPEAT;
+        index := 0;
         initialized := TRUE;
     END_IF;
 
-    // 范围检查
-    IF Index < 0 OR Index >= transLength THEN
-        Index := 0;
+    IF index >= transLength THEN
+        index := 0;
     END_IF;
-    
-    // 发送参数
-    sendDBB := baseOffset + Index + 8;
-    sendLen := WORD_TO_INT(WORD_TO_BLOCK_DB(Pointer_S.DB_Nummer).DW[baseOffset + Index + 2]);
-    // 接收参数
-    recvDB := WORD_TO_INT(WORD_TO_BLOCK_DB(Pointer_S.DB_Nummer).DW[baseOffset + Index + 4]);
-    recvDBB := WORD_TO_INT(WORD_TO_BLOCK_DB(Pointer_S.DB_Nummer).DW[baseOffset + Index + 6]);
+    recvDB := pollList[index].recvDB;
+    recvDBB := pollList[index].recvDBB;
     
     // 发送数据
     CP_SND_IDB (
@@ -71,8 +104,8 @@ BEGIN
         REQ                      := trigger,
         LADDR                    := Laddr,
         DB_NO                    := Poll_DB,
-        DBB_NO                   := sendDBB,
-        LEN                      := sendLen,
+        DBB_NO                   := pollList[index].sendDBB,
+        LEN                      := pollList[index].length,
         R_TYP                    := 'X');
     IF CP_SND_IDB.DONE OR CP_SND_IDB.ERROR THEN
         trigger := FALSE; //取消触发
@@ -83,13 +116,25 @@ BEGIN
         EN_R                     := TRUE,
         LADDR                    := Laddr,
         DB_NO                    := recvDB,
-        DBB_NO                   := recvDBB);
+        DBB_NO                   := recvDBB + 1);
+
+    // 接收成功时处理
+    IF CP_RCV_IDB.NDR THEN
+        pollList[index].waitCount := 0;
+        WORD_TO_BLOCK_DB(INT_TO_WORD(recvDB)).DX[recvDBB,0] := TRUE; // 设置设备正常标志
+        OnRecv(
+            RecvDB := recvDB,
+            RecvDBB := recvDBB,
+            LEN := 0);
+    END_IF;
+    IF pollList[index].waitCount > overTimes THEN // 超时处理
+        WORD_TO_BLOCK_DB(INT_TO_WORD(recvDB)).DX[recvDBB, 0] := FALSE;// 设备不正常
+    END_IF;    
 
     // 启动超时
     TimeOver(
            IN := transmitting,
-           PT := overTime);
-
+           PT := timeout);
     // 处理 transmitting
     IF customTrigger THEN
         IF NOT R THEN 
@@ -99,14 +144,18 @@ BEGIN
         ELSIF NOT transmitting THEN 
             // R & -transmitting
             // 在 R 上升沿启动新一轮计数增加
-            Index := WORD_TO_INT(WORD_TO_BLOCK_DB(Pointer_S.DB_Nummer).DW[baseOffset + Index]);
+            pollList[index].waitCount := pollList[index].waitCount + 1;
+            index := index + 1;
             transmitting := TRUE;
             trigger := TRUE;
         END_IF;
     ELSE
         IF CP_RCV_IDB.NDR OR TimeOver.Q THEN
             // 当前询问结束，计数增加
-            Index := WORD_TO_INT(WORD_TO_BLOCK_DB(Pointer_S.DB_Nummer).DW[baseOffset + Index]); 
+            IF TimeOver.Q THEN
+                pollList[index].waitCount := pollList[index].waitCount + 1;
+            END_IF;
+            index := index + 1; 
             transmitting := FALSE; 
             trigger := FALSE;
         ELSIF NOT transmitting THEN
@@ -116,14 +165,4 @@ BEGIN
         END_IF;
     END_IF;
 
-    // 接收成功时处理
-    IF CP_RCV_IDB.NDR THEN
-        OnRecv(
-            RecvDB := recvDB,
-            RecvDBB := recvDBB,
-            LEN := 0);
-    END_IF;
-
 END_FUNCTION_BLOCK
-
-

@@ -21,7 +21,7 @@ TITLE =
            customTrigger            := L      0.0,
            R                        := L      0.1,
            Laddr                    := 752,
-           DATA                     := "PollList".List);
+           DATA                     := "Poll_DB".CP02);
       NOP   0; 
 END_FUNCTION
 
