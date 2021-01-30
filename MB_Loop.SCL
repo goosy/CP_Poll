@@ -1,13 +1,28 @@
-// 接收DB块 可定义多个
+// 接收DB块 可定义多个，建议一个设备只定义一个。
 DATA_BLOCK "MB01Data" 
-  STRUCT    
-   data1 : ARRAY  [0 .. 255] OF // 未收到数据或设备不正常时，DBX0.0 为 FALSE
-   BYTE ;   
-   data2 : ARRAY  [0 .. 255] OF // 未收到数据或设备不正常时，DBX256.0 为 FALSE
-   BYTE ;   
-   data3 : ARRAY  [0 .. 255] OF // 未收到数据或设备不正常时，DBX512.0 为 FALSE
-   BYTE ;   
-  END_STRUCT ; 
+STRUCT    
+    data1_workOK : BOOL ;  //设备正常指示 0
+    data1_error : BOOL ; //设备错误指示
+    data1_deviceID : BYTE ; //设备号
+    data1_funcNo : BYTE ;  //modbus功能号
+    data1_len : BYTE ; //长度
+    data1_data : ARRAY[4..27] OF BYTE ; //数值
+    data1_CRC : WORD ; //CRC16
+    data2_workOK : BOOL ;  //设备正常指示 30
+    data2_error : BOOL ; //设备错误指示
+    data2_deviceID : BYTE ; //设备号
+    data2_funcNo : BYTE ;  //modbus功能号
+    data2_len : BYTE ; //长度
+    data2_data : ARRAY[34..57] OF BYTE ; //数值
+    data2_CRC : WORD ; //CRC16
+    data3_workOK : BOOL ;  //设备正常指示 60
+    data3_error : BOOL ; //设备错误指示
+    data3_deviceID : BYTE ; //设备号
+    data3_funcNo : BYTE ;  //modbus功能号
+    data3_len : BYTE ; //长度
+    data3_data : ARRAY[64..87] OF BYTE ; //数值
+    data3_CRC : WORD ; //CRC16
+END_STRUCT ; 
 BEGIN
 END_DATA_BLOCK
 
@@ -36,37 +51,33 @@ DATA_BLOCK "Poll_DB"
         END_STRUCT;
     END_STRUCT
 BEGIN
-   List1[0].DeviceID := B#16#1; 
-   List1[0].MFunction := B#16#3; 
-   List1[0].StartAddress := W#16#4000; 
-   List1[0].Number := W#16#C; 
-   List1[0].CRC := W#16#29CF; 
-   List1[0].recvDB := 51; 
-   List1[0].recvDBB := 0; 
-   List1[1].DeviceID := B#16#2; 
-   List1[1].MFunction := B#16#4; 
-   List1[1].StartAddress := W#16#4800; 
-   List1[1].Number := W#16#C; 
-   List1[1].CRC := W#16#2BAF; 
-   List1[1].recvDB := 51; 
-   List1[1].recvDBB := 256; 
-   List1[2].DeviceID := B#16#3; 
-   List1[2].MFunction := B#16#4; 
-   List1[2].StartAddress := W#16#4800; 
-   List1[2].Number := W#16#C; 
-   List1[2].CRC := W#16#2BAF; 
-   List1[2].recvDB := 51; 
-   List1[2].recvDBB := 512; 
+    List1[0].DeviceID := B#16#1; 
+    List1[0].MFunction := B#16#3; 
+    List1[0].StartAddress := W#16#4000; 
+    List1[0].Number := W#16#C; 
+    List1[0].CRC := W#16#29CF; 
+    List1[0].recvDB := 51; 
+    List1[0].recvDBB := 0; 
+    List1[1].DeviceID := B#16#2; 
+    List1[1].MFunction := B#16#4; 
+    List1[1].StartAddress := W#16#4800; 
+    List1[1].Number := W#16#C; 
+    List1[1].CRC := W#16#2BAF; 
+    List1[1].recvDB := 51; 
+    List1[1].recvDBB := 30; 
+    List1[2].DeviceID := B#16#3; 
+    List1[2].MFunction := B#16#4; 
+    List1[2].StartAddress := W#16#4800; 
+    List1[2].Number := W#16#C; 
+    List1[2].CRC := W#16#2BAF; 
+    List1[2].recvDB := 51; 
+    List1[2].recvDBB := 60; 
 END_DATA_BLOCK
 
+// 本功能块加入到OB中
 FUNCTION "MB_Loop" : VOID
-
-VAR_TEMP
-END_VAR
-
 "MB_Poll"."MB01"(
     Laddr := 752,
     DATA := "Poll_DB".List1);
-
 END_FUNCTION
 
