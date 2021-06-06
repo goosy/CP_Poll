@@ -1,83 +1,128 @@
-// 接收DB块 可定义多个，建议一个设备只定义一个。
-DATA_BLOCK "MB01Data" 
+// 设备数据接收DB块，可根据设备定义多个接收DB块
+// 本例"DeviceData"的DB号为51，在其中定义了4个设备的数据，依据实际增减
+// 建议一个设备只定义在一个DB中，本例一个DB定义多个设备仅为了展示可以这样组织
+DATA_BLOCK "DeviceData" 
 STRUCT    
-    data1_workOK : BOOL ;  //设备正常指示 0
-    data1_error : BOOL ; //设备错误指示
-    data1_deviceID : BYTE ; //设备号
-    data1_funcNo : BYTE ;  //modbus功能号
-    data1_len : BYTE ; //长度
-    data1_data : ARRAY[4..27] OF BYTE ; //数值
-    data1_CRC : WORD ; //CRC16
-    data2_workOK : BOOL ;  //设备正常指示 30
-    data2_error : BOOL ; //设备错误指示
-    data2_deviceID : BYTE ; //设备号
-    data2_funcNo : BYTE ;  //modbus功能号
-    data2_len : BYTE ; //长度
-    data2_data : ARRAY[34..57] OF BYTE ; //数值
-    data2_CRC : WORD ; //CRC16
-    data3_workOK : BOOL ;  //设备正常指示 60
-    data3_error : BOOL ; //设备错误指示
-    data3_deviceID : BYTE ; //设备号
-    data3_funcNo : BYTE ;  //modbus功能号
-    data3_len : BYTE ; //长度
-    data3_data : ARRAY[64..87] OF BYTE ; //数值
-    data3_CRC : WORD ; //CRC16
+    device0_workOK : BOOL ;  //设备正常指示 0
+    device0_error : BOOL ; //设备错误指示
+    device0_deviceID : BYTE ; //设备号
+    device0_funcNo : BYTE ;  //modbus功能号
+    device0_len : BYTE ; //长度
+    device0_data : ARRAY[4..27] OF BYTE ; //数值
+    device0_CRC : WORD ; //CRC16
+    device1_workOK : BOOL ;  //设备正常指示 0
+    device1_error : BOOL ; //设备错误指示
+    device1_deviceID : BYTE ; //设备号
+    device1_funcNo : BYTE ;  //modbus功能号
+    device1_len : BYTE ; //长度
+    device1_data : ARRAY[34..57] OF BYTE ; //数值
+    device1_CRC : WORD ; //CRC16
+    device2_workOK : BOOL ;  //设备正常指示 30
+    device2_error : BOOL ; //设备错误指示
+    device2_deviceID : BYTE ; //设备号
+    device2_funcNo : BYTE ;  //modbus功能号
+    device2_len : BYTE ; //长度
+    device2_data : ARRAY[64..87] OF BYTE ; //数值
+    device2_CRC : WORD ; //CRC16
+    device3_workOK : BOOL ;  //设备正常指示 60
+    device3_error : BOOL ; //设备错误指示
+    device3_deviceID : BYTE ; //设备号
+    device3_funcNo : BYTE ;  //modbus功能号
+    device3_len : BYTE ; //长度
+    device3_data : ARRAY[94..117] OF BYTE ; //数值
+    device3_CRC : WORD ; //CRC16
 END_STRUCT ; 
 BEGIN
 END_DATA_BLOCK
 
-//轮询DB块，含modbus发送指令，List为一个341模块的轮询序列，多个341可以定义多个List
+// 轮询DB块，含modbus发送指令，
+// 多个CP341模块可以定义多个轮询序列，本例只定义了2个
+//     "Poll_DB".List0为一个CP341模块的轮询序列
+//     "Poll_DB".List1为另一个CP341模块的轮询序列
+// PLC系统如只有一个CP341模块，可删除"Poll_DB".List1
 DATA_BLOCK "Poll_DB" 
+STRUCT
+    List0: ARRAY[0..1] OF  //轮询命令数据，在修改数组定义决定轮询个数
     STRUCT
-        List0: ARRAY[1..2] OF  //modbus发送命令
-        STRUCT
-            DeviceID : BYTE;    //子站地址
-            MFunction : BYTE;    //modbus 功能号
-            StartAddress : WORD;    //起始地址
-            Number : WORD;    //长度
-            CRC : WORD;    //CRC
-            recvDB : INT;    //接收DB块号
-            recvDBB : INT;    //接收DB起始地址
-        END_STRUCT;
-        List1: ARRAY[0..2] OF  //modbus发送命令
-        STRUCT
-            DeviceID : BYTE;    //子站地址
-            MFunction : BYTE;    //modbus 功能号
-            StartAddress : WORD;    //起始地址
-            Number : WORD;    //长度
-            CRC : WORD;    //CRC
-            recvDB : INT;    //接收DB块号
-            recvDBB : INT;    //接收DB起始地址
-        END_STRUCT;
-    END_STRUCT
+        DeviceID : BYTE;    //子站地址
+        MFunction : BYTE;    //modbus 功能号
+        StartAddress : WORD;    //起始地址
+        Number : WORD;    //长度
+        CRC : WORD;    //CRC
+        recvDB : INT;    //接收DB块号
+        recvDBB : INT;    //接收DB起始地址
+    END_STRUCT;
+    List1: ARRAY[1..2] OF  //轮询命令数据，在修改数组定义决定轮询个数
+    STRUCT
+        DeviceID : BYTE;    //子站地址
+        MFunction : BYTE;    //modbus 功能号
+        StartAddress : WORD;    //起始地址
+        Number : WORD;    //长度
+        CRC : WORD;    //CRC
+        recvDB : INT;    //接收DB块号
+        recvDBB : INT;    //接收DB起始地址
+    END_STRUCT;
+END_STRUCT
 BEGIN
-    List1[0].DeviceID := B#16#1; 
-    List1[0].MFunction := B#16#3; 
-    List1[0].StartAddress := W#16#4000; 
-    List1[0].Number := W#16#C; 
-    List1[0].CRC := W#16#29CF; 
-    List1[0].recvDB := 51; 
-    List1[0].recvDBB := 0; 
+    // 在下面填写第一个轮询数据 List0
+    List0[0].DeviceID := B#16#1; 
+    List0[0].MFunction := B#16#3; 
+    List0[0].StartAddress := W#16#4000; 
+    List0[0].Number := W#16#C; 
+    List0[0].CRC := W#16#29CF; 
+    List0[0].recvDB := 51; 
+    List0[0].recvDBB := 0; 
+    List0[1].DeviceID := B#16#1; 
+    List0[1].MFunction := B#16#3; 
+    List0[1].StartAddress := W#16#4000; 
+    List0[1].Number := W#16#C; 
+    List0[1].CRC := W#16#29CF; 
+    List0[1].recvDB := 51; 
+    List0[1].recvDBB := 30; 
+    // 在下面填写第一个轮询数据 List1
     List1[1].DeviceID := B#16#2; 
     List1[1].MFunction := B#16#4; 
     List1[1].StartAddress := W#16#4800; 
     List1[1].Number := W#16#C; 
     List1[1].CRC := W#16#2BAF; 
     List1[1].recvDB := 51; 
-    List1[1].recvDBB := 30; 
+    List1[1].recvDBB := 60; 
     List1[2].DeviceID := B#16#3; 
     List1[2].MFunction := B#16#4; 
     List1[2].StartAddress := W#16#4800; 
     List1[2].Number := W#16#C; 
     List1[2].CRC := W#16#2BAF; 
     List1[2].recvDB := 51; 
-    List1[2].recvDBB := 60; 
+    List1[2].recvDBB := 90; 
 END_DATA_BLOCK
 
-// 本功能块加入到OB中
+// 主调用
+// 需要准备好已编译好的"MB_Loop"FB块和每个调用对应的背景块
+// 本例设定有2个CP341调用，对应背景块为 MB01 MB02 
+// 加入到OB中生效
 FUNCTION "MB_Loop" : VOID
+
+// 第一个CP341的调用
+// 轮询数据为"Poll_DB".List0
+// 本例用默认的顺序轮询方式，即一轮成功或失败后即进行下一轮
 "MB_Poll"."MB01"(
-    Laddr := 752,
-    DATA := "Poll_DB".List1);
+    Laddr := 752,  // CP341的模块地址为752
+    DATA := "Poll_DB".List0);
+
+// 第二个CP341的调用，展示部分高级用法
+// 轮询数据为"Poll_DB".List1
+// 本例用1HZ自定义频率（定时存储区M0.5）进行轮询
+"MB_Poll"."MB02"(
+    customTrigger := TRUE, // 设置由外部触发变量定义何时发送，默认为FALSE
+    R             := M0.5, // 外部触发变量，在上升沿发送下一轮
+    Laddr         := 800,  // CP341的模块地址为800
+    DATA          := "Poll_DB".List1);
+IF "MB02".OnReceive THEN // 当有新数据接收到时
+    // "MB02".receiveDB 指示已接收DB号
+    // "MB02".receiveDBB 指示已接收DB偏移量
+    // "MB02".receiveLEN 已接收数据的长度
+    ; // 利用已接收信息进行数据转移等处理
+END_IF;
+
 END_FUNCTION
 

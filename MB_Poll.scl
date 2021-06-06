@@ -3,12 +3,12 @@ TITLE='modbus 轮询'
 VERSION:'1.10'
 KNOW_HOW_PROTECT
 AUTHOR:Goosy
-NAME:SC
-FAMILY:CP
+NAME:MB_Poll
+FAMILY:GooLib
 
 VAR_INPUT
     customTrigger : BOOL ; //默认为false,即顺序轮询。当本参数为true时，由参数R定义轮询方式。
-    R : BOOL ; // 当customTrigger置位时起作用，在R的上升沿发出当次轮询。比如可以把一个秒脉冲赋值给R
+    R : BOOL ; // 当customTrigger为true时，在R的上升沿发出当次轮询。比如可以把一个秒脉冲赋值给R
     Laddr : INT ; // 模块地址
     timeout : TIME := T#2S;   // 单次询问的最大等待时间
     overTimes : INT := 5; // 单次询问的回应时间大于间隔时间的 overTimes 倍，判定超时，标记该设备数据无效
