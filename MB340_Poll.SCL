@@ -1,25 +1,25 @@
-FUNCTION_BLOCK "MB_Poll"
+FUNCTION_BLOCK "MB340_Poll"
 TITLE='modbus 轮询'
-VERSION:'1.10'
+VERSION:'0.1'
 KNOW_HOW_PROTECT
 AUTHOR:Goosy
 NAME:MB_Poll
 FAMILY:GooLib
 
 VAR_INPUT
-    customTrigger : BOOL ; //默认为false,即顺序轮询。当本参数为true时，由参数R定义轮询方式。
-    R : BOOL ; // 当customTrigger为true时，在R的上升沿发出当次轮询。比如可以把一个秒脉冲赋值给R
-    Laddr : INT ; // 模块地址
+    customTrigger : BOOL; //默认为false,即顺序轮询。当本参数为true时，由参数REQ定义轮询方式。
+    REQ : BOOL; // 当customTrigger置位时起作用，在REQ的上升沿发出当次轮询。比如可以把一个秒脉冲赋值给REQ
+    Laddr : INT; // 模块地址
     timeout : TIME := T#2S;   // 单次询问的最大等待时间
     overTimes : INT := 5; // 单次询问的回应时间大于间隔时间的 overTimes 倍，判定超时，标记该设备数据无效
-    DATA : ANY ; // 轮询定义系列数据区
+    DATA : ANY; // 轮询定义系列数据区
     Pointer_S AT DATA : STRUCT  // Define ANY structure
-        SyntaxID: BYTE ;
-        DataType: BYTE ;
-        DataCount: WORD ;
-        DB_Nummer: WORD ;
-        Byte_Pointer: DWORD ;
-    END_STRUCT ;
+        SyntaxID: BYTE;
+        DataType: BYTE;
+        DataCount: WORD;
+        DB_Nummer: WORD;
+        Byte_Pointer: DWORD;
+    END_STRUCT;
 END_VAR
 
 VAR_OUTPUT
@@ -35,27 +35,27 @@ END_VAR
 VAR
     trigger : BOOL; // 内部控制CP341发送
     transmitting : BOOL; // 当前轮询进行中
-    initialized : BOOL ; // 输入已初始化
-    Index : INT ; // 第几轮
-    baseOffset : INT ;
-    transLength : INT ;
+    initialized : BOOL; // 输入已初始化
+    Index : INT; // 第几轮
+    baseOffset : INT;
+    transLength : INT;
     Poll_DB : INT; // 轮询DB号
     sendDBB : INT;
-    recvDB : INT ;    //接收DB块号
-    recvDBB : INT ;    //接收DB起始地址
-    CP_SND_IDB : P_SND_RK;
-    CP_RCV_IDB : P_RCV_RK;
+    recvDB : INT;    //接收DB块号
+    recvDBB : INT;    //接收DB起始地址
+    CP_SEND : P_SEND;
+    CP_RCV : P_RCV;
     TimeOver : TON;
-    waitCount : ARRAY[0..31] OF INT ;
+    waitCount : ARRAY[0..31] OF INT;
 END_VAR
 
 VAR_TEMP
-    w_Poll_DB : WORD ;
-    sendDevice : BYTE ;
-    sendFunction : BYTE ;
-    w_Recv_DB : WORD ;
-    recvDevice : BYTE ;
-    recvFunction : BYTE ;
+    w_Poll_DB : WORD;
+    sendDevice : BYTE;
+    sendFunction : BYTE;
+    w_Recv_DB : WORD;
+    recvDevice : BYTE;
+    recvFunction : BYTE;
     recvLen : INT;
 END_VAR
 
@@ -89,28 +89,26 @@ BEGIN
     // to-do: 写入CRC16
 
     // 发送数据
-    CP_SND_IDB (
-        SF                       := 'S',
+    CP_SEND (
         REQ                      := trigger,
         LADDR                    := Laddr,
         DB_NO                    := Poll_DB,
         DBB_NO                   := sendDBB,
-        LEN                      := 8,
-        R_TYP                    := 'X');
-    IF CP_SND_IDB.DONE OR CP_SND_IDB.ERROR THEN
+        LEN                      := 8);
+    IF CP_SEND.DONE OR CP_SEND.ERROR THEN
         trigger := FALSE; //取消触发
     END_IF;
 
     //接收功能
-    CP_RCV_IDB (
+    CP_RCV (
         EN_R                     := TRUE,
         LADDR                    := Laddr,
         DB_NO                    := recvDB,
         DBB_NO                   := recvDBB + 1);
 
-    OnReceive := CP_RCV_IDB.NDR;
+    OnReceive := CP_RCV.NDR;
     // 接收成功时处理
-    IF CP_RCV_IDB.NDR THEN
+    IF CP_RCV.NDR THEN
         sendDevice := WORD_TO_BLOCK_DB(w_Poll_DB).DB[sendDBB];
         sendFunction := WORD_TO_BLOCK_DB(w_Poll_DB).DB[sendDBB + 1];
         recvDevice :=  WORD_TO_BLOCK_DB(w_Recv_DB).DB[recvDBB + 1];
@@ -141,20 +139,20 @@ BEGIN
 
     // 处理 transmitting
     IF customTrigger THEN
-        IF NOT R THEN
-            // -R
+        IF NOT REQ THEN
+            // -REQ
             trigger := FALSE;
             transmitting := FALSE;
         ELSIF NOT transmitting THEN
-            // R & -transmitting
-            // 在 R 上升沿启动新一轮计数增加
+            // REQ & -transmitting
+            // 在 REQ 上升沿启动新一轮计数增加
             Index := Index + 1;
             transmitting := TRUE;
             trigger := TRUE;
             waitCount[Index] := waitCount[Index] + 1;
         END_IF;
     ELSE
-        IF CP_RCV_IDB.NDR OR TimeOver.Q THEN
+        IF CP_RCV.NDR OR TimeOver.Q THEN
             // 当前询问结束，计数增加
             Index := Index + 1;
             transmitting := FALSE;
