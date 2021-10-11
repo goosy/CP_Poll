@@ -7,19 +7,19 @@ NAME:SC
 FAMILY:GoosyLib
 
 VAR_INPUT 
-    customTrigger : BOOL ; //默认为false,即顺序轮询。当本参数为true时，由参数R定义轮询方式。
-    REQ : BOOL ; // 当customTrigger置位时起作用，在REQ的上升沿发出当次轮询。比如可以把一个秒脉冲赋值给R
-    Laddr : INT ; // 模块地址
+    customTrigger : BOOL; //默认为false,即顺序轮询。当本参数为true时，由参数REQ定义轮询方式。
+    REQ : BOOL; // 当customTrigger置位时起作用，在REQ的上升沿发出当次轮询。比如可以把一个秒脉冲赋值给REQ
+    Laddr : INT; // 模块地址
     timeout : TIME := T#2S;   // 单次询问的最大等待时间 
     overTimes : INT := 3; // 单次询问的回应时间大于一个轮询周期的 overTimes 倍，判定超时，标记该设备数据无效
-    DATA : ANY ; // 轮询定义系列数据区
+    DATA : ANY; // 轮询定义系列数据区
     Pointer_S AT DATA : STRUCT  // Define ANY structure
-        SyntaxID: BYTE ;  
-        DataType: BYTE ;
-        DataCount: INT ;
-        DB_Nummer: WORD ;
-        Byte_Pointer: DWORD ;
-    END_STRUCT ;
+        SyntaxID: BYTE;  
+        DataType: BYTE;
+        DataCount: INT;
+        DB_Nummer: WORD;
+        Byte_Pointer: DWORD;
+    END_STRUCT;
 END_VAR
 
 VAR_OUTPUT
@@ -32,30 +32,30 @@ END_VAR
 VAR
     trigger : BOOL; // 内部控制CP341发送
     transmitting : BOOL; // 当前轮询进行中
-    initialized : BOOL ; // 输入已初始化
-    baseOffset : INT ;
-    transLength : INT ;
-    index : INT ; // 第几轮
+    initialized : BOOL; // 输入已初始化
+    baseOffset : INT; // 轮询区的起始偏移量
+    endOffset : INT; // 轮询区的结束偏移量
+    transLength : INT;
+    index : INT; // 第几轮
     Poll_DB : INT; // 轮询DB号
     CP_SEND : P_SND_RK;
     CP_RCV : P_RCV_RK;
     TimeOver : TON;
-    pollList : ARRAY [0..31] OF //轮询定义
-    STRUCT
-        sendDBB : INT ;
-        length : INT ;
-        recvDB : INT ;
-        recvDBB : INT ;
-        waitCount : INT ;
-    END_STRUCT ;
+    pollList : ARRAY [0..31] OF STRUCT //轮询定义
+        sendDBB : INT;
+        length : INT;
+        recvDB : INT;
+        recvDBB : INT;
+        waitCount : INT;
+    END_STRUCT;
 END_VAR
 
 VAR_TEMP
-    w_PollDB : WORD ;
-    recvDB : INT ;
-    recvDBB : INT ;
-    currOffset : INT ; // 当前轮询的偏移
-    next : INT ;
+    w_PollDB : WORD;
+    recvDB : INT;
+    recvDBB : INT;
+    currOffset : INT; // 当前轮询的偏移
+    size : INT;    
 END_VAR
 
 
@@ -73,19 +73,20 @@ BEGIN
         baseOffset := DWORD_TO_INT(SHR(IN := Pointer_S.Byte_Pointer, N := 3));
         index := 0;
         currOffset := baseOffset;
+        endOffset := baseOffset + Pointer_S.DataCount;
         REPEAT
             // current
             pollList[index].sendDBB := currOffset + 8;
-            next := WORD_TO_INT(WORD_TO_BLOCK_DB(w_PollDB).DW[currOffset]);
+            size := WORD_TO_INT(WORD_TO_BLOCK_DB(w_PollDB).DW[currOffset]);
             pollList[index].length := WORD_TO_INT(WORD_TO_BLOCK_DB(w_PollDB).DW[currOffset + 2]);
             pollList[index].recvDB := WORD_TO_INT(WORD_TO_BLOCK_DB(w_PollDB).DW[currOffset + 4]);
             pollList[index].recvDBB := WORD_TO_INT(WORD_TO_BLOCK_DB(w_PollDB).DW[currOffset + 6]);
             pollList[index].waitCount := 0;
 
             // next
-            currOffset := currOffset + next; 
+            currOffset := currOffset + size; 
             // 范围检查
-            IF next <= 8 OR currOffset >= baseOffset + Pointer_S.DataCount - 8 THEN
+            IF size <= 8 OR currOffset >= endOffset - 8 THEN
                 currOffset := baseOffset;
                 transLength := index + 1;
             ELSE

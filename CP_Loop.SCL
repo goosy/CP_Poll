@@ -9,7 +9,7 @@ END_DATA_BLOCK
 //轮询DB块，含485发送指令，CP02为一个CP轮询序列，多个CP可以定义多个轮询序列
 DATA_BLOCK "Poll_DB" 
 STRUCT
-    CP01 : ARRAY  [0 .. 3 ] OF STRUCT //电量表 modbus协议
+    CP01 : ARRAY  [0 .. 3 ] OF STRUCT // modbus协议 每个询问固定长度12 (非本例使用结构)
         Address : BYTE ;    //子站地址
         MFunction : BYTE ;    //modbus 功能号
         StartAddress : WORD ;    //起始地址
@@ -18,19 +18,19 @@ STRUCT
         recvDB : INT ;    //接收DB块号
         recvDBB : INT ;    //接收DB起始地址
     END_STRUCT ;
-    CP02 : STRUCT     //天然气表 本例的自定义协议
-        next0 : INT ;    //下一轮询偏移量，最后一个轮询应置为0重新回到第1个
-        length0 : INT  := 8;    //发送长度
+    CP02 : STRUCT     //自定义协议 每个询问长度不固定(本例使用结构)
+        size_0 : INT ;    //本轮询问数据总长度(含发送数据长度)，最后一个轮询应置为0重新回到第1个
+        send_length_0 : INT  := 8;    //发送数据长度
         recvDB0 : INT ;    //接收DB块号
         recvDBB0 : INT ;    //接收DB起始地址
         sendData0 : ARRAY  [0 .. 7 ] OF BYTE ; //发送数据
-        next1 : INT ;    //下一轮询偏移量，最后一个轮询应置为0重新回到第1个
-        length1 : INT  := 7;    //发送长度
+        size_1 : INT ;    //本轮询问数据总长度(含发送数据长度)，最后一个轮询应置为0重新回到第1个
+        send_length_1 : INT  := 7;    //发送数据长度
         recvDB1 : INT ;    //接收DB块号
         recvDBB1 : INT ;    //接收DB起始地址
         sendData1 : ARRAY  [0 .. 6 ] OF BYTE ; //发送数据
-        next2 : INT ;    //下一轮询偏移量，最后一个轮询应置为0重新回到第1个
-        length2 : INT  := 7;    //发送长度
+        size_2 : INT ;    //本轮询问数据总长度(含发送数据长度)，最后一个轮询应置为0重新回到第1个
+        send_length_2 : INT  := 7;    //发送数据长度
         recvDB2 : INT ;    //接收DB块号
         recvDBB2 : INT ;    //接收DB起始地址
         sendData2 : ARRAY  [0 .. 6 ] OF //发送数据
@@ -38,8 +38,8 @@ STRUCT
     END_STRUCT;
 END_STRUCT;
 BEGIN
-   CP02.next0 := 16; 
-   CP02.length0 := 8; 
+   CP02.size_0 := 16; 
+   CP02.send_length_0 := 8; 
    CP02.recvDB0 := 55; 
    CP02.recvDBB0 := 0; 
    CP02.sendData0[0] := B#16#1; 
@@ -50,8 +50,8 @@ BEGIN
    CP02.sendData0[5] := B#16#C; 
    CP02.sendData0[6] := B#16#14; 
    CP02.sendData0[7] := B#16#F; 
-   CP02.next1 := 16; 
-   CP02.length1 := 7; 
+   CP02.size_1 := 16; 
+   CP02.send_length_1 := 7; 
    CP02.recvDB1 := 55; 
    CP02.recvDBB1 := 32; 
    CP02.sendData1[0] := B#16#2; 
@@ -61,8 +61,8 @@ BEGIN
    CP02.sendData1[4] := B#16#18; 
    CP02.sendData1[5] := B#16#8E; 
    CP02.sendData1[6] := B#16#5D; 
-   CP02.next2 := 0; 
-   CP02.length2 := 7; 
+   CP02.size_2 := 16; 
+   CP02.send_length_2 := 7; 
    CP02.recvDB2 := 55; 
    CP02.recvDBB2 := 64; 
    CP02.sendData2[0] := B#16#3; 
