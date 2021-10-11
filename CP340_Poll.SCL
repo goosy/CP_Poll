@@ -1,14 +1,14 @@
-FUNCTION_BLOCK "CP_Poll"
+FUNCTION_BLOCK "CP340_Poll"
 TITLE='485轮询'
-VERSION:'0.10'
+VERSION:'0.1'
 KNOW_HOW_PROTECT
 AUTHOR:Goosy
 NAME:SC
-FAMILY:CP
+FAMILY:GoosyLib
 
 VAR_INPUT 
     customTrigger : BOOL ; //默认为false,即顺序轮询。当本参数为true时，由参数R定义轮询方式。
-    R : BOOL ; // 当customTrigger置位时起作用，在R的上升沿发出当次轮询。比如可以把一个秒脉冲赋值给R
+    REQ : BOOL ; // 当customTrigger置位时起作用，在REQ的上升沿发出当次轮询。比如可以把一个秒脉冲赋值给R
     Laddr : INT ; // 模块地址
     timeout : TIME := T#2S;   // 单次询问的最大等待时间 
     overTimes : INT := 3; // 单次询问的回应时间大于一个轮询周期的 overTimes 倍，判定超时，标记该设备数据无效
@@ -22,7 +22,11 @@ VAR_INPUT
     END_STRUCT ;
 END_VAR
 
-VAR_IN_OUT
+VAR_OUTPUT
+    OnReceive : BOOL; // 已接收指示
+    receiveDB : INT; // 已接收DB号
+    receiveDBB : INT; // 已接收DB偏移量
+    receiveLEN : INT; // 已接收数据的长度
 END_VAR
 
 VAR
@@ -33,8 +37,8 @@ VAR
     transLength : INT ;
     index : INT ; // 第几轮
     Poll_DB : INT; // 轮询DB号
-    CP_SND_IDB : P_SND_RK;
-    CP_RCV_IDB : P_RCV_RK;
+    CP_SEND : P_SEND;
+    CP_RCV : P_RCV;
     TimeOver : TON;
     pollList : ARRAY [0..31] OF //轮询定义
     STRUCT
@@ -57,6 +61,7 @@ END_VAR
 
 BEGIN
 
+    // 初始化轮询列表
     IF NOT initialized THEN
         IF (Pointer_S.DB_Nummer = 0) 
             OR (Pointer_S.DataType <> B#16#2)
@@ -99,33 +104,31 @@ BEGIN
     recvDBB := pollList[index].recvDBB;
     
     // 发送数据
-    CP_SND_IDB (
-        SF                       := 'S',
+    CP_SEND (
         REQ                      := trigger,
         LADDR                    := Laddr,
         DB_NO                    := Poll_DB,
         DBB_NO                   := pollList[index].sendDBB,
-        LEN                      := pollList[index].length,
-        R_TYP                    := 'X');
-    IF CP_SND_IDB.DONE OR CP_SND_IDB.ERROR THEN
+        LEN                      := pollList[index].length);
+    IF CP_SEND.DONE OR CP_SEND.ERROR THEN
         trigger := FALSE; //取消触发
     END_IF;
 
     //接收功能
-    CP_RCV_IDB (
+    CP_RCV (
         EN_R                     := TRUE,
         LADDR                    := Laddr,
         DB_NO                    := recvDB,
         DBB_NO                   := recvDBB + 1);
 
     // 接收成功时处理
-    IF CP_RCV_IDB.NDR THEN
+    OnReceive := CP_RCV.NDR;
+    IF CP_RCV.NDR THEN
         pollList[index].waitCount := 0;
         WORD_TO_BLOCK_DB(INT_TO_WORD(recvDB)).DX[recvDBB,0] := TRUE; // 设置设备正常标志
-        OnRecv(
-            RecvDB := recvDB,
-            RecvDBB := recvDBB,
-            LEN := 0);
+        receiveDB := recvDB;
+        receiveDBB := recvDBB;
+        receiveLEN := CP_RCV.LEN;
     END_IF;
     IF pollList[index].waitCount > overTimes THEN // 超时处理
         WORD_TO_BLOCK_DB(INT_TO_WORD(recvDB)).DX[recvDBB, 0] := FALSE;// 设备不正常
@@ -137,20 +140,20 @@ BEGIN
            PT := timeout);
     // 处理 transmitting
     IF customTrigger THEN
-        IF NOT R THEN 
-            // -R
+        IF NOT REQ THEN 
+            // -REQ
             trigger := FALSE;
             transmitting := FALSE;
         ELSIF NOT transmitting THEN 
-            // R & -transmitting
-            // 在 R 上升沿启动新一轮计数增加
+            // REQ & -transmitting
+            // 在 REQ 上升沿启动新一轮计数增加
             pollList[index].waitCount := pollList[index].waitCount + 1;
             index := index + 1;
             transmitting := TRUE;
             trigger := TRUE;
         END_IF;
     ELSE
-        IF CP_RCV_IDB.NDR OR TimeOver.Q THEN
+        IF CP_RCV.NDR OR TimeOver.Q THEN
             // 当前询问结束，计数增加
             IF TimeOver.Q THEN
                 pollList[index].waitCount := pollList[index].waitCount + 1;

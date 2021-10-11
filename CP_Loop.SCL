@@ -1,74 +1,43 @@
 // 接收DB块 可定义多个
 DATA_BLOCK DB55 
-    STRUCT    
-       buff : ARRAY  [0 .. 299 ] OF BYTE ;   
-    END_STRUCT ; 
+STRUCT
+    buff : ARRAY  [0 .. 299 ] OF BYTE ;   
+END_STRUCT ; 
 BEGIN
 END_DATA_BLOCK
 
-//轮询DB块，含485发送指令，List为一个341模块的轮询序列，多个341可以定义多个List
+//轮询DB块，含485发送指令，CP02为一个CP轮询序列，多个CP可以定义多个轮询序列
 DATA_BLOCK "Poll_DB" 
-  STRUCT     
-   CP01 : ARRAY  [0 .. 3 ] OF //电量表
-   STRUCT     
-    Address : BYTE ;    //子站地址
-    MFunction : BYTE ;    //modbus 功能号
-    StartAddress : WORD ;    //起始地址
-    Number : WORD ;    //长度
-    CRC : WORD ;    //CRC
-    recvDB : INT ;    //接收DB块号
-    recvDBB : INT ;    //接收DB起始地址
-   END_STRUCT ;    
-   CP02 : STRUCT     //天然气表
-    next0 : INT ;    //下一轮询偏移量，最后一个轮询应置为0重新回到第1个
-    length0 : INT  := 8;    //发送长度
-    recvDB0 : INT ;    //接收DB块号
-    recvDBB0 : INT ;    //接收DB起始地址
-    sendData0 : ARRAY  [0 .. 7 ] OF //发送数据
-    BYTE ;    
-    next1 : INT ;    //下一轮询偏移量，最后一个轮询应置为0重新回到第1个
-    length1 : INT  := 7;    //发送长度
-    recvDB1 : INT ;    //接收DB块号
-    recvDBB1 : INT ;    //接收DB起始地址
-    sendData1 : ARRAY  [0 .. 6 ] OF //发送数据
-    BYTE ;    
-    next2 : INT ;    //下一轮询偏移量，最后一个轮询应置为0重新回到第1个
-    length2 : INT  := 7;    //发送长度
-    recvDB2 : INT ;    //接收DB块号
-    recvDBB2 : INT ;    //接收DB起始地址
-    sendData2 : ARRAY  [0 .. 6 ] OF //发送数据
-    BYTE ;    
-   END_STRUCT ;    
-  END_STRUCT ;    
+STRUCT
+    CP01 : ARRAY  [0 .. 3 ] OF STRUCT //电量表 modbus协议
+        Address : BYTE ;    //子站地址
+        MFunction : BYTE ;    //modbus 功能号
+        StartAddress : WORD ;    //起始地址
+        Number : WORD ;    //长度
+        CRC : WORD ;    //CRC
+        recvDB : INT ;    //接收DB块号
+        recvDBB : INT ;    //接收DB起始地址
+    END_STRUCT ;
+    CP02 : STRUCT     //天然气表 本例的自定义协议
+        next0 : INT ;    //下一轮询偏移量，最后一个轮询应置为0重新回到第1个
+        length0 : INT  := 8;    //发送长度
+        recvDB0 : INT ;    //接收DB块号
+        recvDBB0 : INT ;    //接收DB起始地址
+        sendData0 : ARRAY  [0 .. 7 ] OF BYTE ; //发送数据
+        next1 : INT ;    //下一轮询偏移量，最后一个轮询应置为0重新回到第1个
+        length1 : INT  := 7;    //发送长度
+        recvDB1 : INT ;    //接收DB块号
+        recvDBB1 : INT ;    //接收DB起始地址
+        sendData1 : ARRAY  [0 .. 6 ] OF BYTE ; //发送数据
+        next2 : INT ;    //下一轮询偏移量，最后一个轮询应置为0重新回到第1个
+        length2 : INT  := 7;    //发送长度
+        recvDB2 : INT ;    //接收DB块号
+        recvDBB2 : INT ;    //接收DB起始地址
+        sendData2 : ARRAY  [0 .. 6 ] OF //发送数据
+        BYTE ;
+    END_STRUCT;
+END_STRUCT;
 BEGIN
-   CP01[0].Address := B#16#1; 
-   CP01[0].MFunction := B#16#3; 
-   CP01[0].StartAddress := W#16#25; 
-   CP01[0].Number := W#16#5C; 
-   CP01[0].CRC := W#16#5438; 
-   CP01[0].recvDB := 51; 
-   CP01[0].recvDBB := 0; 
-   CP01[1].Address := B#16#2; 
-   CP01[1].MFunction := B#16#3; 
-   CP01[1].StartAddress := W#16#25; 
-   CP01[1].Number := W#16#5C; 
-   CP01[1].CRC := W#16#540B; 
-   CP01[1].recvDB := 52; 
-   CP01[1].recvDBB := 0; 
-   CP01[2].Address := B#16#3; 
-   CP01[2].MFunction := B#16#3; 
-   CP01[2].StartAddress := W#16#25; 
-   CP01[2].Number := W#16#5C; 
-   CP01[2].CRC := W#16#55DA; 
-   CP01[2].recvDB := 53; 
-   CP01[2].recvDBB := 0; 
-   CP01[3].Address := B#16#4; 
-   CP01[3].MFunction := B#16#3; 
-   CP01[3].StartAddress := W#16#25; 
-   CP01[3].Number := W#16#5C; 
-   CP01[3].CRC := W#16#546D; 
-   CP01[3].recvDB := 54; 
-   CP01[3].recvDBB := 0; 
    CP02.next0 := 16; 
    CP02.length0 := 8; 
    CP02.recvDB0 := 55; 
@@ -105,24 +74,23 @@ BEGIN
    CP02.sendData2[6] := B#16#60; 
 END_DATA_BLOCK
 
-FUNCTION "OnRecv" : VOID
-TITLE ='收到数据后的处理'
-VAR_INPUT
-  RecvDB : INT ; //当前已接收数据块号 
-  RecvDBB : INT ; //当前已接收数据开始地址
-  Len : INT ; //接收长度
-END_VAR
-BEGIN
-END_FUNCTION
-
 // 调用
 FUNCTION "CP_Loop" : VOID
-
-"CP_Poll"."CP01"(
+// 正常顺序轮询
+"CP340_Poll"."CP01"( // CP340调用"CP340_Poll"， CP341调用"CP341_Poll"， 注意背景块保持一致
     Laddr := 256,
     DATA := "Poll_DB".CP02);
-
+// 显示部分高级用法
+// 本例用1HZ自定义频率（定时存储区M0.5）进行轮询
+"CP341_Poll"."CP02"( // CP340调用"CP340_Poll"， CP341调用"CP341_Poll"， 注意背景块保持一致
+    customTrigger := TRUE, // 设置由外部触发变量定义何时发送，默认为FALSE
+    REQ           := M0.5, // 外部触发变量，在上升沿发送下一轮
+    Laddr         := 272,  // CP模块地址为272
+    DATA          := "Poll_DB".CP02);
+IF "CP02".OnReceive THEN // 当有新数据接收到时
+    ; // 利用已接收信息进行数据转移等处理，其中：
+    // "CP02".receiveDB 指示已接收DB号
+    // "CP02".receiveDBB 指示已接收DB偏移量
+    // "CP02".receiveLEN 已接收数据的长度
+END_IF;
 END_FUNCTION
-
-
-
