@@ -22,13 +22,6 @@ VAR_INPUT
     END_STRUCT;
 END_VAR
 
-VAR_OUTPUT
-    OnReceive : BOOL; // 已接收指示
-    receiveDB : INT; // 已接收DB号
-    receiveDBB : INT; // 已接收DB偏移量
-    receiveLEN : INT; // 已接收数据的长度
-END_VAR
-
 VAR
     trigger : BOOL; // 内部控制CP341发送
     transmitting : BOOL; // 当前轮询进行中
@@ -125,16 +118,15 @@ BEGIN
         DBB_NO                   := recvDBB + 1);
 
     // 接收成功时处理
-    OnReceive := CP_RCV.NDR;
     IF CP_RCV.NDR THEN
         pollList[index].waitCount := 0;
         WORD_TO_BLOCK_DB(INT_TO_WORD(recvDB)).DX[recvDBB,0] := TRUE; // 设置设备正常标志
-        receiveDB := recvDB;
-        receiveDBB := recvDBB;
-        receiveLEN := CP_RCV.LEN;
+        WORD_TO_BLOCK_DB(INT_TO_WORD(recvDB)).DX[recvDBB,1] := FALSE; // 设置设备无效标志
     END_IF;
+    WORD_TO_BLOCK_DB(INT_TO_WORD(recvDB)).DX[recvDBB,2] := CP_RCV.NDR; // 设置设备接收标志
     IF pollList[index].waitCount > overTimes THEN // 超时处理
-        WORD_TO_BLOCK_DB(INT_TO_WORD(recvDB)).DX[recvDBB, 0] := FALSE;// 设备不正常
+        WORD_TO_BLOCK_DB(INT_TO_WORD(recvDB)).DX[recvDBB, 0] := FALSE;// 设置设备正常标志
+        WORD_TO_BLOCK_DB(INT_TO_WORD(recvDB)).DX[recvDBB, 1] := TRUE;// 设置设备无效标志
     END_IF;    
 
     // 启动超时
