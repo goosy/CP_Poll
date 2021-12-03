@@ -5,6 +5,7 @@ DATA_BLOCK "DeviceData"
 STRUCT    
     device0_workOK : BOOL;  //设备正常指示 0
     device0_error : BOOL; //设备错误指示
+    device0_on_receive : BOOL; //设备接收指示
     device0_deviceID : BYTE; //设备号
     device0_funcNo : BYTE;  //modbus功能号
     device0_len : BYTE; //长度
@@ -12,6 +13,7 @@ STRUCT
     device0_CRC : WORD; //CRC16
     device1_workOK : BOOL;  //设备正常指示 0
     device1_error : BOOL; //设备错误指示
+    device1_on_receive : BOOL; //设备接收指示
     device1_deviceID : BYTE; //设备号
     device1_funcNo : BYTE;  //modbus功能号
     device1_len : BYTE; //长度
@@ -19,6 +21,7 @@ STRUCT
     device1_CRC : WORD; //CRC16
     device2_workOK : BOOL;  //设备正常指示 30
     device2_error : BOOL; //设备错误指示
+    device2_on_receive : BOOL; //设备接收指示
     device2_deviceID : BYTE; //设备号
     device2_funcNo : BYTE;  //modbus功能号
     device2_len : BYTE; //长度
@@ -26,6 +29,7 @@ STRUCT
     device2_CRC : WORD; //CRC16
     device3_workOK : BOOL;  //设备正常指示 60
     device3_error : BOOL; //设备错误指示
+    device3_on_receive : BOOL; //设备接收指示
     device3_deviceID : BYTE; //设备号
     device3_funcNo : BYTE;  //modbus功能号
     device3_len : BYTE; //长度
@@ -115,11 +119,11 @@ FUNCTION "MB_Loop" : VOID
     REQ           := M0.5, // 外部触发变量，在上升沿发送下一轮
     Laddr         := 752,  // CP模块地址为752
     DATA          := "Poll_DB".List1);
-IF "MB02".OnReceive THEN // 当有新数据接收到时
-    ; // 利用已接收信息进行数据转移等处理，其中：
-    // "MB02".receiveDB 指示已接收DB号
-    // "MB02".receiveDBB 指示已接收DB偏移量
-    // "MB02".receiveLEN 已接收数据的长度
+
+IF "DeviceData".device3_on_receive THEN // 当有某设备有新数据接收到时
+    // 利用已接收信息进行数据转移等处理
+    // on_receive 仅在一个调用循环周期内置位，不必取上升沿
+    ;
 END_IF;
 
 END_FUNCTION

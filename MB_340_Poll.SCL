@@ -1,6 +1,6 @@
 FUNCTION_BLOCK "MB340_Poll"
 TITLE='modbus 轮询'
-VERSION:'0.1'
+VERSION:'0.2'
 KNOW_HOW_PROTECT
 AUTHOR:Goosy
 NAME:MB_Poll
@@ -20,13 +20,6 @@ VAR_INPUT
         DB_Nummer: WORD;
         Byte_Pointer: DWORD;
     END_STRUCT;
-END_VAR
-
-VAR_OUTPUT
-    OnReceive : BOOL; // 已接收指示
-    receiveDB : INT; // 已接收DB号
-    receiveDBB : INT; // 已接收DB偏移量
-    receiveLEN : INT; // 已接收数据的长度
 END_VAR
 
 VAR_IN_OUT
@@ -106,7 +99,7 @@ BEGIN
         DB_NO                    := recvDB,
         DBB_NO                   := recvDBB + 1);
 
-    OnReceive := CP_RCV.NDR;
+    WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,2] := CP_RCV.NDR; // 设备接收标志
     // 接收成功时处理
     IF CP_RCV.NDR THEN
         sendDevice := WORD_TO_BLOCK_DB(w_Poll_DB).DB[sendDBB];
@@ -118,13 +111,10 @@ BEGIN
             waitCount[Index] := 0;
             WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,0] := TRUE; // 设备正常标志
             WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,1] := FALSE; // 设备错误标志
-            // 记录最后一次接收位置
-            receiveDB := recvDB;
-            receiveDBB := recvDBB;
-            receiveLEN := recvLen;
         ELSE
             WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,0] := FALSE; // 设备正常标志
             WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,1] := TRUE; // 设备错误标志;
+            WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,2] := FALSE; // 设备接收标志
         END_IF;
     END_IF;
     IF waitCount[Index] > overTimes THEN // 超时处理
