@@ -1,4 +1,4 @@
-FUNCTION_BLOCK "MB341_Poll"
+FUNCTION_BLOCK "CP340_Poll"
 TITLE='modbus 轮询'
 VERSION:'0.2'
 KNOW_HOW_PROTECT
@@ -10,7 +10,7 @@ VAR_INPUT
     customTrigger : BOOL; //默认为false,即顺序轮询。当本参数为true时，由参数REQ定义轮询方式。
     REQ : BOOL; // 当customTrigger置位时起作用，在REQ的上升沿发出当次轮询。比如可以把一个秒脉冲赋值给REQ
     Laddr : INT; // 模块地址
-    timeout : TIME := T#2S;   // 单次询问的最大等待时间
+    waitTime : TIME := T#2S;   // 单次询问的最大等待时间
     overTimes : INT := 5; // 单次询问的回应时间大于间隔时间的 overTimes 倍，判定超时，标记该设备数据无效
     DATA : ANY; // 轮询定义系列数据区
     Pointer_S AT DATA : STRUCT  // Define ANY structure
@@ -36,8 +36,8 @@ VAR
     sendDBB : INT;
     recvDB : INT;    //接收DB块号
     recvDBB : INT;    //接收DB起始地址
-    CP_SEND : P_SND_RK;
-    CP_RCV : P_RCV_RK;
+    CP_SEND : P_SEND;
+    CP_RCV : P_RCV;
     TimeOver : TON;
     waitCount : ARRAY[0..31] OF INT;
 END_VAR
@@ -83,13 +83,11 @@ BEGIN
 
     // 发送数据
     CP_SEND (
-        SF                       := 'S',
         REQ                      := trigger,
         LADDR                    := Laddr,
         DB_NO                    := Poll_DB,
         DBB_NO                   := sendDBB,
-        LEN                      := 8,
-        R_TYP                    := 'X');
+        LEN                      := 8);
     IF CP_SEND.DONE OR CP_SEND.ERROR THEN
         trigger := FALSE; //取消触发
     END_IF;
@@ -127,7 +125,7 @@ BEGIN
     // 启动超时
     TimeOver(
            IN := transmitting,
-           PT := timeout);
+           PT := waitTime);
 
     // 处理 transmitting
     IF customTrigger THEN
