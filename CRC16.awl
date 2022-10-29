@@ -1,0 +1,63 @@
+FUNCTION "CRC16" : VOID
+
+VAR_INPUT
+  DB_NO : INT ;
+  DBB_Start : INT ;
+  DBB_Counts : INT ;
+END_VAR
+VAR_OUTPUT
+  CRC : WORD ;
+END_VAR
+VAR_TEMP
+  CRC_REG : WORD ;
+  DB_NO_TEMP : INT ;
+  BytesChecked : INT ;
+  BitsChecked : INT ;
+END_VAR
+
+BEGIN
+
+NETWORK
+TITLE =
+
+      L     W#16#FFFF;
+      T     #CRC_REG; //预置CRC寄存器
+      L     #DB_NO;
+      T     #DB_NO_TEMP;
+      OPN   DB [#DB_NO_TEMP];
+      L     #DBB_Start; //读入校验起始字节
+      SLD   3;
+      LAR1  ;
+
+      L     #DBB_Counts; //读入校验字节数量
+_A:   T     #BytesChecked; //字节处理循环
+      L     DBB [AR1,P#0.0];
+      L     LB     1;
+      XOW   ;
+      T     LB     1;
+
+      L     8;
+_B:   T     #BitsChecked; //位处理循环
+      L     #CRC_REG;
+      SRW   1;
+      T     #CRC_REG;
+      JZ    _C; //检验移出位是否为1
+      L     #CRC_REG;
+      L     W#16#A001;
+      XOW   ;
+      T     #CRC_REG;
+
+_C:   L     #BitsChecked; //校验下个位
+      LOOP  _B;
+
+      +AR1  P#1.0; //校验下个字节
+      L     #BytesChecked;
+      LOOP  _A;
+
+      L     LB     1;
+      SLW   8;
+      L     LB     0;
+      OW    ;
+      T     #CRC; //输出校验码
+
+END_FUNCTION

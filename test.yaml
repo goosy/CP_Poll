@@ -1,0 +1,86 @@
+---
+type: SC
+name: test
+description: |
+  使用 CP340 通信，必须在step7工程中加入以下库
+  
+  * FB2 P_RCV
+  * FB3 P_SEND
+
+  使用 CP341 通信，必须在step7工程中加入以下库
+  
+  * FB2 P_RCV
+  * FB3 P_SEND
+
+includes: |
+  DATA_BLOCK "DeviceData" 
+  STRUCT    
+    device0_workOK : BOOL;  //设备正常指示 0
+    device0_error : BOOL; //设备错误指示
+    device0_on_receive : BOOL; //设备接收指示
+    device0_deviceID : BYTE; //设备号
+    device0_funcNo : BYTE;  //modbus功能号
+    device0_len : BYTE; //长度
+    device0_data : ARRAY[4..27] OF BYTE; //数值
+    device0_CRC : WORD; //CRC16
+    device1_workOK : BOOL;  //设备正常指示
+    device1_error : BOOL; //设备错误指示
+    device1_on_receive : BOOL; //设备接收指示
+    device1_data : ARRAY[32..39] OF BYTE; //数值
+    device2_workOK : BOOL;  //设备正常指示 30
+    device2_error : BOOL; //设备错误指示
+    device2_on_receive : BOOL; //设备接收指示
+    device2_deviceID : BYTE; //设备号
+    device2_funcNo : BYTE;  //modbus功能号
+    device2_len : BYTE; //长度
+    device2_data : ARRAY[4..27] OF BYTE; //数值
+    device2_CRC : WORD; //CRC16
+  END_STRUCT;
+  BEGIN
+  END_DATA_BLOCK
+
+symbols:
+# 系统已有4个内置符号：
+# - [CP340_Poll, FB340] CP340通信主处理函数
+# - [CP341_Poll, FB341] CP341通信主处理函数
+# - [SC_Loop, FC345]      表示主循环调用FC，将这个加入OB1中
+# - [SC_polls_DB, DB880]  将用于保存轮询命令数据
+# 可以在对上述内置符号的地址进行更改，只要重新定义就可以了，注意保持名称一致
+- [count, MW20, INT]
+- [CRC16, FC16, ~, modbus CRC16 校验]
+- [DeviceData, DB1]
+
+list : # CP 模块列表
+- comment: CP01 256
+  type: CP341
+  module_addr: 256
+  DB: [CP01, DB2]
+  polls_name: List0
+  polls:
+    # deivce_ID function started_addr length 配置项允许16进制字符串
+  - comment: 第1个poll modbus协议
+    deivce_ID: 1                      # 16进制数用字符串形式 
+    function: 3                       # 16进制数用字符串形式 
+    started_addr: 0                   # 16进制数用字符串形式 
+    length: 12                        # 16进制数用字符串形式
+    recv_DB: DeviceData
+    recv_start: 0
+  - comment: 第2个poll 自定义协议
+    send_data: 02 03 00 00 18 8E 5D    # send_data 必须是一个由空格分隔的16进制字节的字符串
+    recv_DB: DeviceData
+    recv_start: 30                     # 要注意开始地址不一样
+  - comment: 第3个poll 自定义协议
+    deivce_ID: 10 
+    function: 3 
+    started_addr: 0 
+    length: 12
+    recv_DB: DeviceData
+    recv_start: 40
+
+# 额外代码，合并到CP_Loop FC块结尾
+loop_additional_code: |
+  IF "DeviceData".device0_on_receive THEN // 当指定设备(这里为设备1)有新数据接收到时
+    count := count +1; // 利用已接收信息进行数据转换移动等处理
+  END_IF;
+
+...

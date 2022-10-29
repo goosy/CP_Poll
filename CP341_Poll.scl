@@ -1,6 +1,6 @@
 FUNCTION_BLOCK "CP341_Poll"
 TITLE='485轮询'
-VERSION:'0.3'
+VERSION:'0.4'
 KNOW_HOW_PROTECT
 AUTHOR:Goosy
 NAME:SC
@@ -58,6 +58,7 @@ VAR_TEMP
   recvDB : INT;
   recvDBB : INT;
   recvLen : INT;
+  CRC : WORD;
   size : INT;
   currOffset : INT; // 当前轮询的偏移
 END_VAR
@@ -123,48 +124,69 @@ BEGIN
   END_IF;
 
   w_Poll_DB := INT_TO_WORD(Poll_DB);
-  sendDBB := polls[transIndex].sendDBB;
-  recvDB := polls[transIndex].recvDB;
-  w_Recv_DB := INT_TO_WORD(recvDB);
-  recvDBB := polls[transIndex].recvDBB;
   
   // 发送数据
+  sendDBB := polls[transIndex].sendDBB;
+  sendLength := polls[transIndex].sendLength;
+  IF polls[transIndex].modbusFlag AND WORD_TO_BLOCK_DB(w_Poll_DB).DW[sendDBB + sendLength - 2] = W#16#0 THEN
+    // modbus 进行CRC校验
+    "CRC16"( 
+       DB_NO     := Poll_DB,
+       DBB_Start := sendDBB,
+       DBB_Counts:= sendLength - 2,
+       CRC       := WORD_TO_BLOCK_DB(w_Poll_DB).DW[sendDBB + sendLength - 2]);
+  END_IF;
   CP_SEND (
     SF                       := 'S',
     REQ                      := trigger,
     LADDR                    := Laddr,
     DB_NO                    := Poll_DB,
     DBB_NO                   := sendDBB,
-    LEN                      := polls[transIndex].sendLength,
+    LEN                      := sendLength,
     R_TYP                    := 'X');
   IF CP_SEND.DONE OR CP_SEND.ERROR THEN
     trigger := FALSE; //取消触发
   END_IF;
 
   //接收功能
+  recvDB := polls[transIndex].recvDB;
+  recvDBB := polls[transIndex].recvDBB;
   CP_RCV (
     EN_R                     := TRUE,
     LADDR                    := Laddr,
     DB_NO                    := recvDB,
     DBB_NO                   := recvDBB + 1);
 
+  w_Recv_DB := INT_TO_WORD(recvDB);
   WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,2] := CP_RCV.NDR; // 设置设备接收标志
   // 接收成功时处理
   IF CP_RCV.NDR AND polls[transIndex].modbusFlag THEN // modbus 接收附加判断
-      sendDevice := WORD_TO_BLOCK_DB(w_Poll_DB).DB[sendDBB];
-      sendFunction := WORD_TO_BLOCK_DB(w_Poll_DB).DB[sendDBB + 1];
-      recvDevice :=  WORD_TO_BLOCK_DB(w_Recv_DB).DB[recvDBB + 1];
-      recvFunction := WORD_TO_BLOCK_DB(w_Recv_DB).DB[recvDBB + 2];
-      recvLen := BYTE_TO_INT(WORD_TO_BLOCK_DB(w_Recv_DB).DB[recvDBB + 3]) + 4;
-      IF sendDevice = recvDevice AND sendFunction = recvFunction AND recvLen > 4 THEN
-          polls[transIndex].count := 0;
-          WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,0] := TRUE; // 设备正常标志
-          WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,1] := FALSE; // 设备错误标志
+    sendDevice := WORD_TO_BLOCK_DB(w_Poll_DB).DB[sendDBB];
+    sendFunction := WORD_TO_BLOCK_DB(w_Poll_DB).DB[sendDBB + 1];
+    recvDevice :=  WORD_TO_BLOCK_DB(w_Recv_DB).DB[recvDBB + 1];
+    recvFunction := WORD_TO_BLOCK_DB(w_Recv_DB).DB[recvDBB + 2];
+    CRC := W#16#0;
+    IF sendDevice = recvDevice AND sendFunction = recvFunction THEN
+      recvLen := BYTE_TO_INT(WORD_TO_BLOCK_DB(w_Recv_DB).DB[recvDBB + 3]) + 3;
+      "CRC16"( 
+        DB_NO     := recvDB,
+        DBB_Start := recvDBB + 1,
+        DBB_Counts:= recvLen,
+        CRC       := CRC);
+      IF CRC = WORD_TO_BLOCK_DB(w_Recv_DB).DW[recvDBB + recvLen + 1] THEN
+        polls[transIndex].count := 0;
+        WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,0] := TRUE; // 设备正常标志
+        WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,1] := FALSE; // 设备错误标志
       ELSE
-          WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,0] := FALSE; // 设备正常标志
-          WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,1] := TRUE; // 设备错误标志;
-          WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,2] := FALSE; // 设备接收标志
+        WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,0] := FALSE; // 设备正常标志
+        WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,1] := TRUE; // 设备错误标志;
+        WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,2] := FALSE; // 设备接收标志
       END_IF;
+    ELSE
+      WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,0] := FALSE; // 设备正常标志
+      WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,1] := TRUE; // 设备错误标志;
+      WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,2] := FALSE; // 设备接收标志
+    END_IF;
   END_IF;
 
   IF CP_RCV.NDR AND NOT polls[transIndex].modbusFlag THEN // 非 modbus 接收不作判断
@@ -202,15 +224,16 @@ BEGIN
     END_IF;
   ELSE
     IF CP_RCV.NDR OR TimeOver.Q THEN
-      // 当前询问结束，计数增加
+      // 当前询问超时计数增加
       IF TimeOver.Q THEN
         polls[transIndex].count := polls[transIndex].count + 1;
       END_IF;
-      transIndex := transIndex + 1; 
+      // 结束当前询问
       transmitting := FALSE; 
       trigger := FALSE;
     ELSIF NOT transmitting THEN
-      // 启动新一轮
+      // 启动新一轮，同时保证前一轮有一个循环时间处理状态
+      transIndex := transIndex + 1; 
       transmitting := TRUE;
       trigger := TRUE;
     END_IF;
