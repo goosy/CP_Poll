@@ -1,43 +1,65 @@
 ---
 type: SC
 name: test
-description: |
-  使用 CP340 通信，必须在step7工程中加入以下库
-  
-  * FB2 P_RCV
-  * FB3 P_SEND
-
-  使用 CP341 通信，必须在step7工程中加入以下库
-  
-  * FB2 P_RCV
-  * FB3 P_SEND
+description: 
 
 includes: |
-  DATA_BLOCK "DeviceData" 
-  STRUCT    
-    device0_workOK : BOOL;  //设备正常指示 0
-    device0_error : BOOL; //设备错误指示
-    device0_on_receive : BOOL; //设备接收指示
-    device0_deviceID : BYTE; //设备号
-    device0_funcNo : BYTE;  //modbus功能号
-    device0_len : BYTE; //长度
-    device0_data : ARRAY[4..27] OF BYTE; //数值
-    device0_CRC : WORD; //CRC16
-    device1_workOK : BOOL;  //设备正常指示
-    device1_error : BOOL; //设备错误指示
-    device1_on_receive : BOOL; //设备接收指示
+  DATA_BLOCK "DeviceData"
+  STRUCT
+    device0_workOK : BOOL;                //设备正常指示
+    device0_error : BOOL;                 //设备错误指示
+    device0_on_receive : BOOL;            //设备接收指示
+    device0_sending : BOOL;               //正在向设备发送标识
+    device0_deviceID : BYTE;              //设备号
+    device0_funcNo : BYTE;                //modbus功能号
+    device0_len : BYTE;                   //长度
+    device0_data : ARRAY[4..27] OF BYTE;  //数值
+    device0_CRC : WORD;                   //CRC16
+    device1_workOK : BOOL;                //设备正常指示
+    device1_error : BOOL;                 //设备错误指示
+    device1_on_receive : BOOL;            //设备接收指示
+    device1_sending : BOOL;               //正在向设备发送标识
     device1_data : ARRAY[32..39] OF BYTE; //数值
-    device2_workOK : BOOL;  //设备正常指示 30
-    device2_error : BOOL; //设备错误指示
-    device2_on_receive : BOOL; //设备接收指示
-    device2_deviceID : BYTE; //设备号
-    device2_funcNo : BYTE;  //modbus功能号
-    device2_len : BYTE; //长度
-    device2_data : ARRAY[4..27] OF BYTE; //数值
-    device2_CRC : WORD; //CRC16
   END_STRUCT;
   BEGIN
   END_DATA_BLOCK
+
+  FUNCTION_BLOCK "write_cmd"
+  TITLE='撬块写命令'
+  VERSION:'1.0'
+  AUTHOR:Goosy
+  NAME:writecmd
+  FAMILY:GooLib
+
+  VAR_INPUT
+    recv: STRUCT
+      workOK : BOOL;     //设备正常指示
+      error : BOOL;      //设备错误指示
+      on_receive : BOOL; //设备接收指示
+      sending : BOOL;    //正在向设备发送标识
+      ID : BYTE;         //子站地址
+      func : BYTE;       //modbus 功能号
+      start : WORD;      //起始地址
+      data : WORD;       //数据
+      CRC : WORD;        //检验字
+    END_STRUCT;
+  END_VAR
+
+  VAR_OUTPUT
+    send: STRUCT
+      ID : BYTE := B#16#10;   //子站地址
+      func : BYTE := B#16#6;  //modbus 功能号
+      start : INT := 1226;    //起始地址
+      data : INT := 0;        //数据
+      CRC : WORD;             //检验字
+    END_STRUCT;
+  END_VAR
+
+  BEGIN
+  IF recv.on_receive THEN
+    send.data := send.data + 1;
+  END_IF;
+  END_FUNCTION_BLOCK
 
 symbols:
 # 系统已有4个内置符号：
@@ -49,33 +71,36 @@ symbols:
 - [count, MW20, INT]
 - [CRC16, FC16, ~, modbus CRC16 校验]
 - [DeviceData, DB1]
+- [write_cmd, FB811]
+- [cmd_ret, DB2, write_cmd]
 
 list : # CP 模块列表
 - comment: CP01 256
   type: CP341
   module_addr: 256
-  DB: [CP01, DB2]
+  DB: [CP01, DB10]
   polls_name: List0
   polls:
-    # deivce_ID function started_addr length 配置项允许16进制字符串
   - comment: 第1个poll modbus协议
-    deivce_ID: 1                      # 16进制数用字符串形式 
-    function: 3                       # 16进制数用字符串形式 
-    started_addr: 0                   # 16进制数用字符串形式 
-    length: 12                        # 16进制数用字符串形式
+    # 没有 send_data 配置项时，会将以下 deivce_ID function address length 配置项组合成发送数据
+    deivce_ID: 1
+    function: 3
+    address: 0
+    length: 12
+    # 配置项允许16进制字符串
     recv_DB: DeviceData
     recv_start: 0
   - comment: 第2个poll 自定义协议
+    # 只要有 send_data 配置项，就
     send_data: 02 03 00 00 18 8E 5D    # send_data 必须是一个由空格分隔的16进制字节的字符串
     recv_DB: DeviceData
     recv_start: 30                     # 要注意开始地址不一样
-  - comment: 第3个poll 自定义协议
-    deivce_ID: 10 
-    function: 3 
-    started_addr: 0 
-    length: 12
-    recv_DB: DeviceData
-    recv_start: 40
+  - comment: 第3个poll 指定发送块
+    send_DB: cmd_ret
+    send_start: 10
+    send_length: 8
+    recv_DB: cmd_ret
+    recv_start: 0
 
 # 额外代码，合并到CP_Loop FC块结尾
 loop_additional_code: |
