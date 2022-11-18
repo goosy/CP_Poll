@@ -1,6 +1,6 @@
 FUNCTION_BLOCK "CP341_Poll"
 TITLE='485轮询'
-VERSION:'0.5'
+VERSION:'0.6'
 KNOW_HOW_PROTECT
 AUTHOR:Goosy
 NAME:SC
@@ -40,6 +40,9 @@ END_VAR
 
 VAR_TEMP
   is_modbus : BOOL;
+  on_receive : BOOL;
+  send_byte : BYTE;
+  recv_byte : BYTE;
   w_Poll_DB : WORD;
   w_Send_DB : WORD;
   sendDB : INT;
@@ -50,6 +53,7 @@ VAR_TEMP
   recvDBB : INT;
   recvLength : INT;
   CRC : WORD;
+  // recv_CRC : WORD;
   wait_count : INT;
   currOffset : INT; // 当前轮询的偏移
 END_VAR
@@ -132,40 +136,46 @@ BEGIN
     LADDR                    := Laddr,
     DB_NO                    := recvDB,
     DBB_NO                   := recvDBB + 1);
-  WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,2] := CP_RCV.NDR; // 设置设备接收标志
 
   // 接收成功时处理
-  IF CP_RCV.NDR AND is_modbus THEN // modbus 接收附加判断
-    CRC := W#16#0;
-    IF  //sendDevice = recvDevice AND sendFunction = recvFunction
-      WORD_TO_BLOCK_DB(w_Send_DB).DB[sendDBB] = WORD_TO_BLOCK_DB(w_Recv_DB).DB[recvDBB + 1]
-      AND WORD_TO_BLOCK_DB(w_Send_DB).DB[sendDBB + 1] = WORD_TO_BLOCK_DB(w_Recv_DB).DB[recvDBB + 2]
-    THEN
+  on_receive := CP_RCV.NDR;
+  IF on_receive AND is_modbus THEN // 对 modbus 接收附加判断
+    // check MFunction
+    send_byte := WORD_TO_BLOCK_DB(w_Send_DB).DB[sendDBB + 1];
+    recv_byte := WORD_TO_BLOCK_DB(w_Recv_DB).DB[recvDBB + 2];
+    on_receive := send_byte = recv_byte;
+    // check device_ID
+    send_byte := WORD_TO_BLOCK_DB(w_Send_DB).DB[sendDBB];
+    recv_byte := WORD_TO_BLOCK_DB(w_Recv_DB).DB[recvDBB + 1];
+    on_receive := on_receive AND send_byte = recv_byte;
+    IF send_byte = B#16#5 OR send_byte = B#16#6 THEN // 05 06 功能
+      recvLength := 6;
+    ELSE // 非 05 06 功能
       recvLength := BYTE_TO_INT(WORD_TO_BLOCK_DB(w_Recv_DB).DB[recvDBB + 3]) + 3;
-      "CRC16"(
-        DB_NO     := recvDB,
-        DBB_Start := recvDBB + 1,
-        DBB_Counts:= recvLength,
-        CRC       := CRC);
-      IF CRC = WORD_TO_BLOCK_DB(w_Recv_DB).DW[recvDBB + recvLength + 1] THEN
-        WORD_TO_BLOCK_DB(w_Poll_DB).DW[currOffset + 14] := W#16#0;
-        WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,0] := TRUE; // 设备正常标志
-        WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,1] := FALSE; // 设备错误标志
-      ELSE
-        WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,0] := FALSE; // 设备正常标志
-        WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,1] := TRUE; // 设备错误标志;
-        WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,2] := FALSE; // 设备接收标志
-      END_IF;
-    ELSE
-      WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,0] := FALSE; // 设备正常标志
-      WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,1] := TRUE; // 设备错误标志;
-      WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,2] := FALSE; // 设备接收标志
     END_IF;
+    "CRC16"(
+      DB_NO     := recvDB,
+      DBB_Start := recvDBB + 1,
+      DBB_Counts:= recvLength,
+      CRC       := CRC);
+    // FIXME: something wrong on check receive CRC
+    // IF on_receive THEN // check CRC
+    //   recv_byte := WORD_TO_BLOCK_DB(w_Recv_DB).DB[recvDBB + recvLength + 1];
+    //   recv_CRC := SHL(IN:=BYTE_TO_WORD(recv_byte), N:=8);
+    //   recv_byte := WORD_TO_BLOCK_DB(w_Recv_DB).DB[recvDBB + recvLength + 2];
+    //   recv_CRC := recv_CRC OR BYTE_TO_WORD(recv_byte);
+    //   on_receive := CRC = recv_CRC;
+    // END_IF;
   END_IF;
-  IF CP_RCV.NDR AND NOT is_modbus THEN // 非 modbus 接收不作判断
-    WORD_TO_BLOCK_DB(w_Poll_DB).DW[currOffset + 14] := W#16#0;
-    WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,0] := TRUE; // 设置设备正常标志
-    WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,1] := FALSE; // 设置设备无效标志
+  WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,2] := on_receive; // 设置设备接收标志
+
+  IF on_receive THEN
+    WORD_TO_BLOCK_DB(w_Poll_DB).DW[currOffset + 14] := W#16#0; //wait_count
+    WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,0] := TRUE; // 设备正常标志
+    WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,1] := FALSE; // 设备错误标志
+  ELSIF CP_RCV.NDR THEN
+    WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,0] := FALSE; // 设备正常标志
+    WORD_TO_BLOCK_DB(w_Recv_DB).DX[recvDBB,1] := TRUE; // 设备错误标志;
   END_IF;
 
   // 超时处理
