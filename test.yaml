@@ -1,6 +1,6 @@
 ---
-type: SC
 name: test
+feature: SC
 description: 
 
 includes: |

@@ -21,36 +21,36 @@ NETWORK
 TITLE =
 
       L     W#16#FFFF;
-      T     #CRC_REG; //Ԥ��CRC�Ĵ���
+      T     #CRC_REG; //预置CRC寄存器
       L     #DB_NO;
       T     #DB_NO_TEMP;
       OPN   DB [#DB_NO_TEMP];
-      L     #DBB_Start; //����У����ʼ�ֽ�
+      L     #DBB_Start; //读入校验起始字节
       SLD   3;
       LAR1  ;
 
-      L     #DBB_Counts; //����У���ֽ�����
-_A:   T     #BytesChecked; //�ֽڴ���ѭ��
+      L     #DBB_Counts; //读入校验字节数量
+_A:   T     #BytesChecked; //字节处理循环
       L     DBB [AR1,P#0.0];
       L     LB     1;
       XOW   ;
       T     LB     1;
 
       L     8;
-_B:   T     #BitsChecked; //λ����ѭ��
+_B:   T     #BitsChecked; //位处理循环
       L     #CRC_REG;
       SRW   1;
       T     #CRC_REG;
-      JZ    _C; //�����Ƴ�λ�Ƿ�Ϊ1
+      JZ    _C; //检验移出位是否为1
       L     #CRC_REG;
       L     W#16#A001;
       XOW   ;
       T     #CRC_REG;
 
-_C:   L     #BitsChecked; //У���¸�λ
+_C:   L     #BitsChecked; //校验下个位
       LOOP  _B;
 
-      +AR1  P#1.0; //У���¸��ֽ�
+      +AR1  P#1.0; //校验下个字节
       L     #BytesChecked;
       LOOP  _A;
 
@@ -58,6 +58,6 @@ _C:   L     #BitsChecked; //У���¸�λ
       SLW   8;
       L     LB     0;
       OW    ;
-      T     #CRC; //���У����
+      T     #CRC; //输出校验码
 
 END_FUNCTION
