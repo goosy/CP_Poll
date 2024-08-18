@@ -1,8 +1,8 @@
 // 设备数据接收DB块，可根据设备定义多个接收DB块
 // 本例"DeviceData"的DB号为55，在其中定义了4个设备的数据，依据实际增减
 // 建议一个设备只定义在一个DB中，本例一个DB定义多个设备仅为了展示可以这样组织
-DATA_BLOCK "DeviceData" 
-STRUCT    
+DATA_BLOCK "DeviceData"
+STRUCT
   device0_workOK : BOOL;  //设备正常指示 0
   device0_error : BOOL; //设备错误指示
   device0_on_receive : BOOL; //设备接收指示
@@ -46,95 +46,128 @@ END_DATA_BLOCK
 //     "Poll_DB".List0为一个CP341模块的轮询序列
 //     "Poll_DB".List1为另一个CP341模块的轮询序列
 // PLC系统如只有一个CP341模块，可删除"Poll_DB".List1
-DATA_BLOCK "Poll_DB" 
+DATA_BLOCK "Poll_DB"
 STRUCT
-  List0: ARRAY[0..1] OF STRUCT //轮询命令数据，在修改数组定义决定轮询个数
-    // 第1个poll modbus协议
+  List0: ARRAY[0..1] OF STRUCT //轮询数据，修改数组定义决定轮询个数
+    next: BOOL; // false为结尾，否则有下一个
+    enable: BOOL := TRUE; // 允许本poll通讯
+    modbusFlag : BOOL; // 是否为modbus协议
+    status: WORD;    // 预留
+    sendDB : INT; // 发送DB，为0时为本块
+    sendDBB : INT; // 发送DB起始地址
+    sendLength : INT; // 发送长度
+    recvDB : INT; // 接收DB
+    recvDBB : INT; // 接收DB起始地址
+    waitCount : INT; // 发送等待次数
+  END_STRUCT;
+  List1: ARRAY[0..2] OF STRUCT //轮询数据，修改数组定义决定轮询个数
+    next: BOOL; // false为结尾，否则有下一个
+    enable: BOOL := TRUE; // 允许本poll通讯
+    modbusFlag : BOOL; // 是否为modbus协议
+    status: WORD;    // 预留
+    sendDB : INT; // 发送DB，为0时为本块
+    sendDBB : INT; // 发送DB起始地址
+    sendLength : INT; // 发送长度
+    recvDB : INT; // 接收DB
+    recvDBB : INT; // 接收DB起始地址
+    waitCount : INT; // 发送等待次数
+  END_STRUCT;
+  poll_00_data : STRUCT // 发送数据
+    // List0第1个poll modbus协议
     device_id : BYTE ;    //子站地址
     mfunction : BYTE ;    //modbus 功能号
     start : WORD ;        //起始地址
     length : WORD ;       //长度
     crc : WORD ;          //CRC
-    recvDB : INT ;        //接收DB块号
-    recvDBB : INT ;       //接收DB起始地址
   END_STRUCT;
-  List1 : STRUCT //每个询问长度不固定，自定义协议和modbus协议混用
-    // CP02第1个poll modbus协议
-    device0_id : BYTE ;        //子站地址
-    device0_function : BYTE ;  //modbus 功能号
-    device0_start : WORD ;     //起始地址
-    device0_length : WORD ;    //长度
-    device0_crc : WORD ;       //CRC
-    device0_recvDB : INT ;     //接收DB块号
-    device0_recvDBB : INT ;    //接收DB起始地址
-    // CP02第2个poll 自定义协议
-    device1_customFlag : BYTE ;                    //自定义协议的标识必须为 B#16#0
-    device1_send_length : BYTE ;                   //发送数据长度
-    device1_sendData : ARRAY [0 .. 6 ] OF BYTE ;  //发送数据
-    device1_recv : INT ;                           //接收DB块号
-    device1_recv_offset : INT ;                    //接收DB起始地址
-    // CP02第3个poll 自定义协议
-    device2_customFlag : BYTE ;                    //自定义协议的标识必须为 B#16#0
-    device2_send_length : BYTE ;                   //发送数据长度
-    device2_sendData : ARRAY [0 .. 6 ] OF BYTE ;  //发送数据
-    device2_recv : INT ;                           //接收DB块号
-    device2_recv_offset : INT ;                    //接收DB起始地址
+  poll_01_data : STRUCT
+    // List0第2个poll modbus协议
+    device_id : BYTE ;    //子站地址
+    mfunction : BYTE ;    //modbus 功能号
+    start : WORD ;        //起始地址
+    length : WORD ;       //长度
+    crc : WORD ;          //CRC
   END_STRUCT;
+  poll_10_data : STRUCT
+    // List1第1个poll modbus协议
+    device_id : BYTE ;    //子站地址
+    mfunction : BYTE ;    //modbus 功能号
+    start : WORD ;        //起始地址
+    length : WORD ;       //长度
+    crc : WORD ;          //CRC
+  END_STRUCT;
+  poll_11_data : ARRAY [0 .. 6 ] OF BYTE ;   // List1第2个poll 自定义协议
+  // List1第3个 poll 的发送数据在其它块上，不在这里定义
 END_STRUCT;
 BEGIN
-  // CP01第1个poll modbus协议
-  List0[0].device_id := B#16#1; 
-  List0[0].mfunction := B#16#3; 
-  List0[0].start := W#16#0000; 
-  List0[0].length := W#16#000C; 
-  List0[0].crc := W#16#45CF; 
-  List0[0].recvDB := 55; 
-  List0[0].recvDBB := 0; 
+  // CP01第1个poll
+  List0[0].modbusFlag := true; // modbus 协议要将 modbusFlag 标识设为 true
+  List0[0].sendDB := 44; // 发送数据块号：必须为本数据块 Poll_DB 的块号
+  List0[0].sendDBB := 80; // 发送数据起始地址：这里指向 Poll_DB.poll_00_data 的偏移量
+  List0[0].sendLength := 8; // 发送字节数，modbus 协议必须是8
+  List0[0].recvDB := 55;
+  List0[0].recvDBB := 0;
+  // 发送数据部分
+  poll_00_data.device_id := B#16#1;
+  poll_00_data.mfunction := B#16#3;
+  poll_00_data.start := W#16#0000;
+  poll_00_data.length := W#16#000C;
+  poll_00_data.crc := W#16#45CF;
 
   // List0第2个poll modbus协议
-  List0[1].device_id := B#16#A; 
-  List0[1].mfunction := B#16#3; 
-  List0[1].start := W#16#0000; 
-  List0[1].length := W#16#000C; 
-  List0[1].crc := W#16#44B4;
-  List0[1].recvDB := 55; 
-  List0[1].recvDBB := 30; 
+  List0[1].modbusFlag := true;
+  List0[1].sendDB := 44;
+  List0[1].sendDBB := 88;
+  List0[1].sendLength := 8;
+  List0[1].recvDB := 55;
+  List0[1].recvDBB := 30;
+  // 发送数据部分
+  poll_01_data.device_id := B#16#A;
+  poll_01_data.mfunction := B#16#3;
+  poll_01_data.start := W#16#0000;
+  poll_01_data.length := W#16#000C;
+  poll_01_data.crc := W#16#44B4;
 
   // CP02第1个poll modbus协议
-  List1.device0_id := B#16#A; 
-  List1.device0_function := B#16#3; 
-  List1.device0_start := W#16#0000; 
-  List1.device0_length := W#16#000C; 
-  List1.device0_crc := W#16#44B4;
-  List1.device0_recvDB := 55; 
-  List1.device0_recvDBB := 60; 
+  List1[0].modbusFlag := true;
+  List1[0].sendDB := 44;
+  List1[0].sendDBB := 96;
+  List1[0].sendLength := 8;
+  List1[0].recvDB := 55;
+  List1[0].recvDBB := 60;
+  // 发送数据部分
+  poll_10_data.device_id := B#16#A;
+  poll_10_data.mfunction := B#16#3;
+  poll_10_data.start := W#16#0000;
+  poll_10_data.length := W#16#000C;
+  poll_10_data.crc := W#16#44B4;
 
   // CP02第2个poll 自定义协议
-  List1.device1_customFlag := B#16#0; //自定义协议的标识必须为 B#16#0 
-  List1.device1_send_length := B#16#7;
-  List1.device1_sendData[0] := B#16#2; 
-  List1.device1_sendData[1] := B#16#3; 
-  List1.device1_sendData[2] := B#16#0; 
-  List1.device1_sendData[3] := B#16#0; 
-  List1.device1_sendData[4] := B#16#18; 
-  List1.device1_sendData[5] := B#16#8E; 
-  List1.device1_sendData[6] := B#16#5D;  
-  List1.device1_recv := 55; 
-  List1.device1_recv_offset := 90; 
+  List1[1].modbusFlag := false; // 自定义协议要将 modbusFlag 标识设为 false
+  List1[1].sendDB := 44; // 发送数据在本块上，即 Poll_DB 
+  List1[1].sendDBB := 104;
+  List1[1].sendLength := 7; // 自定义协议自行决定发送长度
+  List1[1].recvDB := 55;
+  List1[1].recvDBB := 90;
+  // 发送数据部分
+  poll_11_data[0] := B#16#2;
+  poll_11_data[1] := B#16#3;
+  poll_11_data[2] := B#16#0;
+  poll_11_data[3] := B#16#0;
+  poll_11_data[4] := B#16#18;
+  poll_11_data[5] := B#16#8E;
+  poll_11_data[6] := B#16#5D;
 
   // CP02第3个poll 自定义协议
-  List1.device2_customFlag := B#16#0; //自定义协议的标识必须为 B#16#0 
-  List1.device2_send_length := B#16#7; 
-  List1.device2_sendData[0] := B#16#3; 
-  List1.device2_sendData[1] := B#16#3; 
-  List1.device2_sendData[2] := B#16#0; 
-  List1.device2_sendData[3] := B#16#0; 
-  List1.device2_sendData[4] := B#16#18; 
-  List1.device2_sendData[5] := B#16#4E; 
-  List1.device2_sendData[6] := B#16#60; 
-  List1.device2_recv := 55; 
-  List1.device2_recv_offset := 120; 
+  List1[2].modbusFlag := false;
+  List1[1].sendDB := 45; // 发送数据在其它块上，这里使用了 DB45
+  List1[1].sendDBB := 0;
+  List1[2].sendLength := 7;
+  List1[2].recvDB := 55;
+  List1[2].recvDBB := 120;
+  // 发送数据在其它块上，不在这里定义，好处是发送数据可以不固定
 END_DATA_BLOCK
+
 
 // 调用
 FUNCTION "CP_Loop" : VOID
