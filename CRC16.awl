@@ -6,7 +6,8 @@ VAR_INPUT
   DBB_Counts : INT ;
 END_VAR
 VAR_OUTPUT
-  CRC : WORD ;
+  CRC_H : BYTE ;
+  CRC_L : BYTE ;
 END_VAR
 VAR_TEMP
   CRC_REG : WORD ;
@@ -54,10 +55,9 @@ _C:   L     #BitsChecked; //校验下个位
       L     #BytesChecked;
       LOOP  _A;
 
+      //输出校验码
       L     LB     1;
-      SLW   8;
+      T     #CRC_H;
       L     LB     0;
-      OW    ;
-      T     #CRC; //输出校验码
-
+      T     #CRC_L;
 END_FUNCTION

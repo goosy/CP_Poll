@@ -1,0 +1,244 @@
+// 本代码由 S7_SCL_SRC_GEN 自动生成。author: goosy.jo@gmail.com
+// 配置文件: D:/codes/AS/S7-AS/CP_Poll/test.yaml
+// 摘要: 164bba97a74bba2e2d1764e4d2aedf16
+
+FUNCTION_BLOCK "write_SC"
+TITLE='MB写命令'
+VERSION:'1.0'
+AUTHOR:Goosy
+NAME:writeB
+FAMILY:GooLib
+VAR_INPUT
+    r_work_F : BOOL ;                  // 设备正常指示
+    r_invalid : BOOL ;                 // 设备无效指示
+    r_on_receive : BOOL ;              // 设备接收指示
+    r_unit_ID : BYTE ;                 // 设备号
+    r_func_code : BYTE ;               // modbus功能号
+    r_length : BYTE ;                  // 接收长度
+    r_B0 : BYTE ;                      // 接收字节
+    r_B1 : BYTE ;                      // 接收字节 CRC_H
+    r_B2 : BYTE ;                      // 接收字节 CRC_L
+    r_B3 : BYTE ;                      // 保留
+    w_work_F : BOOL ;                  // 设备正常指示
+    w_invalid : BOOL ;                 // 设备无效指示
+    w_on_receive : BOOL ;              // 设备接收指示
+    w_unit_ID : BYTE ;                 // 设备号
+    w_func_code : BYTE ;               // modbus功能号
+    start_H : BYTE ;                   // 写起始高字节
+    start_L : BYTE ;                   // 写起始低字节
+    len_H : BYTE ;                     // 写数量高字节
+    len_L : BYTE ;                     // 写数量低字节
+    w_CRC_H : BYTE ;                   // CRC16
+    w_CRC_L : BYTE ;                   // CRC16
+    CH : ARRAY[1..8] OF BOOL;          // QB0 数据
+    B0 AT CH : BYTE;                   // QB0 数据
+END_VAR
+VAR_OUTPUT
+    bytes_count : INT := 10;           // 总字节数
+    unit_ID : BYTE := B#16#4;          // 子站地址
+    func_code : BYTE := B#16#F;        // modbus 功能号，15写多个线圈
+    start : INT := 0;                  // 起始地址
+    length : INT := 8;                 // 数据长度
+    betys : BYTE := B#16#1;            // 字节数
+    data : BYTE := B#16#0;             // 数据
+    CRC_H : BYTE ;                     // CRC16
+    CRC_L : BYTE ;                     // CRC16
+END_VAR
+VAR_IN_OUT
+    writing : BOOL;                    //正在写
+END_VAR
+BEGIN
+IF B0 <> r_B0 THEN
+    data := B0;
+    writing := TRUE;
+END_IF;
+END_FUNCTION_BLOCK
+
+DATA_BLOCK "EDO02" "write_SC"
+BEGIN
+END_DATA_BLOCK
+
+// 设备数据接收DB块，可根据设备定义多个接收DB块
+// 本例"rdata_SC"的DB号为53，在其中定义了4个设备的数据，依据实际增减
+// 建议一个设备只定义在一个DB中，本例一个DB定义多个设备仅为了展示可以这样组织
+DATA_BLOCK "rdata_SC"
+STRUCT
+    device0_workOK : BOOL;  //设备正常指示 0
+    device0_error : BOOL; //设备错误指示
+    device0_on_receive : BOOL; //设备接收指示
+    device0_deviceID : BYTE; //设备号
+    device0_funcNo : BYTE;  //modbus功能号
+    device0_len : BYTE; //长度
+    device0_data : ARRAY[4..31] OF BYTE; //数值
+    device1_workOK : BOOL;  //设备正常指示
+    device1_error : BOOL; //设备错误指示
+    device1_on_receive : BOOL; //设备接收指示
+    device1_deviceID : BYTE; //设备号
+    device1_funcNo : BYTE;  //modbus功能号
+    device1_len : BYTE; //长度
+    device1_data : ARRAY[36..63] OF BYTE; //数值
+    device2_workOK : BOOL;  //设备正常指示
+    device2_error : BOOL; //设备错误指示
+    device2_on_receive : BOOL; //设备接收指示
+    device2_deviceID : BYTE; //设备号
+    device2_funcNo : BYTE;  //modbus功能号
+    device2_len : BYTE; //长度
+    device2_data : ARRAY[68..95] OF BYTE; //数值
+    device3_workOK : BOOL;  //设备正常指示
+    device3_error : BOOL; //设备错误指示
+    device3_on_receive : BOOL; //设备接收指示
+    device3_data0 : BYTE;
+    device3_data : ARRAY[98..127] OF BYTE; //数值
+    device4_workOK : BOOL;  //设备正常指示 30
+    device4_error : BOOL; //设备错误指示
+    device4_on_receive : BOOL; //设备接收指示
+    device4_data0 : BYTE;
+    device4_data : ARRAY[130..159] OF BYTE; //数值
+END_STRUCT;
+BEGIN
+END_DATA_BLOCK
+
+
+// 轮询DB块，含485调度指令和发送数据
+// 多个CP模块可以定义多个轮询序列，本例只定义了1个
+//     "Poll_DB".CP01为一个CP341模块的轮询序列
+//     "Poll_DB".CP02为另一个CP341模块的轮询序列
+DATA_BLOCK "SC_polls_DB"
+STRUCT
+    CP01 : ARRAY [0 .. 4] OF STRUCT //CP01 256 轮询命令数据
+        enable         : BOOL := TRUE; // 允许本poll通讯
+        pause          : BOOL ;        // 本 poll 通讯因通讯失败暂停，由程序自动维护
+        continuous     : BOOL := TRUE; // 不间断询问，默认为TRUE，为 FALSE 时由下方手动触发
+        is_modbus      : BOOL := TRUE; // 是否为modbus协议，默认为true
+        custom_trigger : BOOL ;        // 手动触发询问，当 continuous 为 FALSE 时有效
+        request        : BOOL ;        // 询问请求，仅 continuous 为 FALSE 时有效，它的上升沿置位 custom_trigger
+        request_fo     : BOOL ;        // 询问请求跟随，判断上升沿
+        timeout        : INT := 2000;  // 询问失败超时，超过时间标记本次通讯失败，单位毫秒
+        send_DB        : INT ;         // 发送DB，为0时为本块
+        send_start     : INT ;         // 发送DB起始地址
+        recv_DB        : INT ;         // 接收DB
+        recv_start     : INT ;         // 接收DB起始地址
+        status         : WORD ;        // 预留
+        wait_count     : INT ;         // 发送等待次数
+    END_STRUCT;
+    p0_data : STRUCT
+        send_bytes     : INT := 8;     // 发送字节数，modbus 默认为8。小于251
+        unit_ID        : BYTE ;        //子站地址
+        func_code      : BYTE ;        //modbus 功能号
+        address        : WORD ;        //起始地址
+        data           : WORD ;        //数据，对 05 06 功能码来说为写入值，对其它功能码来说为长度
+        CRC_H          : BYTE ;        //CRC
+        CRC_L          : BYTE ;        //CRC
+    END_STRUCT;
+    p1_data : STRUCT
+        send_bytes     : INT := 8;     // 发送字节数，modbus 默认为8。小于251
+        unit_ID        : BYTE ;        //子站地址
+        func_code      : BYTE ;        //modbus 功能号
+        address        : WORD ;        //起始地址
+        data           : WORD ;        //数据，对 05 06 功能码来说为写入值，对其它功能码来说为长度
+        CRC_H          : BYTE ;        //CRC
+        CRC_L          : BYTE ;        //CRC
+    END_STRUCT;
+    p2_data : STRUCT
+        send_bytes     : INT := 7;     // 发送字节数
+        send_data : ARRAY  [0 .. 6] OF BYTE;    //发送数据
+    END_STRUCT;
+    p3_data : STRUCT
+        send_bytes     : INT := 8;     // 发送字节数，modbus 默认为8。小于251
+        unit_ID        : BYTE ;        //子站地址
+        func_code      : BYTE ;        //modbus 功能号
+        address        : WORD ;        //起始地址
+        data           : WORD ;        //数据，对 05 06 功能码来说为写入值，对其它功能码来说为长度
+        CRC_H          : BYTE ;        //CRC
+        CRC_L          : BYTE ;        //CRC
+    END_STRUCT;
+    // CP01 poll4 的发送数据在其它块上，不在这里定义
+END_STRUCT;
+BEGIN
+    // --- CP01 256 轮询数据
+
+    // poll 0: 第1个poll modbus协议
+    CP01[0].continuous := TRUE;
+    CP01[0].timeout := 2000;
+    CP01[0].is_modbus := TRUE;
+    CP01[0].send_DB := 880;
+    CP01[0].send_start := 80;
+    CP01[0].recv_DB := 53;
+    CP01[0].recv_start := 0;
+    // send data
+    p0_data.send_bytes := 8;
+    p0_data.unit_ID := B#16#1;
+    p0_data.func_code := B#16#3;
+    p0_data.address := W#16#0;
+    p0_data.data := W#16#C;
+
+    // poll 1: 第2个poll 自定义发送时间
+    CP01[1].continuous := FALSE;
+    CP01[1].timeout := 2000;
+    CP01[1].is_modbus := TRUE;
+    CP01[1].send_DB := 880;
+    CP01[1].send_start := 90;
+    CP01[1].recv_DB := 53;
+    CP01[1].recv_start := 32;
+    // send data
+    p1_data.send_bytes := 8;
+    p1_data.unit_ID := B#16#2;
+    p1_data.func_code := B#16#4;
+    p1_data.address := W#16#0;
+    p1_data.data := W#16#C;
+
+    // poll 2: 第3个poll 指定发送数据
+    CP01[2].continuous := TRUE;
+    CP01[2].timeout := 2000;
+    CP01[2].is_modbus := FALSE;
+    CP01[2].send_DB := 880;
+    CP01[2].send_start := 100;
+    CP01[2].recv_DB := 53;
+    CP01[2].recv_start := 64;
+    // send data
+    p2_data.send_bytes := 7;
+    p2_data.send_data[0] := B#16#03;    //发送数据0
+    p2_data.send_data[1] := B#16#03;    //发送数据1
+    p2_data.send_data[2] := B#16#00;    //发送数据2
+    p2_data.send_data[3] := B#16#00;    //发送数据3
+    p2_data.send_data[4] := B#16#18;    //发送数据4
+    p2_data.send_data[5] := B#16#8E;    //发送数据5
+    p2_data.send_data[6] := B#16#5D;    //发送数据6
+
+    // poll 3: 第4个poll 读取线圈
+    CP01[3].continuous := TRUE;
+    CP01[3].timeout := 2000;
+    CP01[3].is_modbus := TRUE;
+    CP01[3].send_DB := 880;
+    CP01[3].send_start := 110;
+    CP01[3].recv_DB := 32;
+    CP01[3].recv_start := 0;
+    // send data
+    p3_data.send_bytes := 8;
+    p3_data.unit_ID := B#16#4;
+    p3_data.func_code := B#16#1;
+    p3_data.address := W#16#0;
+    p3_data.data := W#16#8;
+
+    // poll 4: 第5个poll 指定外部发送块
+    CP01[4].continuous := FALSE;
+    CP01[4].custom_trigger := FALSE;
+    CP01[4].timeout := 2000;
+    CP01[4].is_modbus := TRUE;
+    CP01[4].send_DB := 32;
+    CP01[4].send_start := 20;
+    CP01[4].recv_DB := 32;
+    CP01[4].recv_start := 8;
+END_DATA_BLOCK
+
+// 主调用
+FUNCTION "SC_Loop" : VOID
+
+// 1. CP341 CP01 256
+"CP341_Poll"."CP01"(
+    module_addr := 256,
+    DATA        := "SC_polls_DB".CP01);
+"SC_polls_DB".CP01[1].request := "Clock_1Hz";
+"write_SC"."EDO02"(writing := "SC_polls_DB".CP01[4].custom_trigger);
+
+END_FUNCTION
