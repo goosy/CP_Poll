@@ -1,6 +1,6 @@
 FUNCTION_BLOCK "CP341_Poll"
 TITLE='485轮询'
-VERSION:'0.7'
+VERSION:'0.8'
 KNOW_HOW_PROTECT
 AUTHOR:Goosy
 NAME:SC
@@ -30,7 +30,8 @@ VAR
     is_modbus : BOOL;            // 是否为modbus协议
     is_polling : BOOL ;          // 正处于单次询问中
     poll_enable : BOOL;          // 轮询使能标志
-    continuous : BOOL;           // 是否连续询问，默认为TRUE
+    continuous : BOOL;           // 是否连续询问
+    periodicity : BOOL;          // 是否周期询问
     custom_trigger : BOOL;       // 用户自定义触发器
     poll_index : INT;            // 第几轮询问
     poll_length : INT;           // 询问总轮数
@@ -100,14 +101,14 @@ BEGIN
     // Check request rising edge to set custom_trigger
     FOR tmp_int := 0 TO poll_length - 1 BY 1 DO
         offset := poll_base + tmp_int * 16;
-        request := WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 5];
-        IF WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 2] THEN // continuous
-            CONTINUE;
+        IF WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 2] OR WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 3] THEN
+            CONTINUE; // continuous OR periodicity is false, skip this polling
         END_IF;
-        IF request AND NOT WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 6] THEN
-            WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 4] := TRUE; // custom_trigger
+        request := WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 6];
+        IF request AND NOT WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 7] THEN
+            WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 5] := TRUE; // custom_trigger
         END_IF;
-        WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 6] := request;
+        WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 7] := request;
     END_FOR;
 
     // Range check
@@ -121,7 +122,7 @@ BEGIN
 
     // handle polling
     // polling lifetime: poll_start - poll_end
-    poll_end := receive.NDR OR receive.ERROR OR time_over.Q;
+    poll_end := NOT periodicity AND (receive.NDR OR receive.ERROR) OR time_over.Q;
     poll_start := FALSE;
     IF poll_end THEN
         // 结束当前询问，保证本轮有一个循环时间处理状态
@@ -132,7 +133,7 @@ BEGIN
     ELSIF NOT is_polling THEN // is_polling为否时开始新一轮询问
         poll_start := TRUE;
         send_trigger := FALSE;
-    ELSIF continuous OR custom_trigger THEN
+    ELSIF continuous OR periodicity OR custom_trigger THEN
         // 发送触发器在 poll_start 下一循环置位
         // 用户自定义触发器 custom_trigger 由外部或 request 上升沿置位
         // custom_trigger 仅使用 poll_start 时的值
@@ -147,7 +148,7 @@ BEGIN
         tmp_int := WORD_TO_INT(WORD_TO_BLOCK_DB(w_poll_DB).DW[offset + 14]) + 1;
         IF NOT poll_enable THEN
             WORD_TO_BLOCK_DB(w_poll_DB).DW[offset + 14] := W#16#0; //wait_count
-        ELSIF continuous OR custom_trigger THEN
+        ELSIF continuous OR periodicity OR custom_trigger THEN
             IF tmp_int < 0 THEN
                 tmp_int := 0; // Avoid underflow
             ELSIF tmp_int > retry_times THEN // Retry after exceeding retry_times
@@ -174,10 +175,11 @@ BEGIN
         // the data below is only prepared when a new round starts
         poll_enable := WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 0];
         continuous := WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 2];
-        is_modbus := WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 3];
-        custom_trigger := WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 4];
+        periodicity := WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 3] AND NOT continuous;
+        is_modbus := WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 4];
+        custom_trigger := WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 5];
         IF custom_trigger THEN // custom_trigger 仅在 poll_start 时复位
-            WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 4] := FALSE; // 复位 custom_trigger
+            WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 5] := FALSE; // 复位 custom_trigger
         END_IF;
         timeout := WORD_TO_DINT(WORD_TO_BLOCK_DB(w_poll_DB).DW[offset + 2]);
         w_send_DB := WORD_TO_BLOCK_DB(w_poll_DB).DW[offset + 4];
@@ -188,7 +190,7 @@ BEGIN
 
         // skip this round if not poll_enable or poll_pause
         // DON'T use REPEAT loop, which may cause an infinite loop.
-        IF NOT poll_enable OR poll_pause OR (NOT continuous AND NOT custom_trigger) THEN
+        IF NOT poll_enable OR poll_pause OR (NOT continuous AND NOT periodicity AND NOT custom_trigger) THEN
             RETURN; // Ignore this round and proceed directly to the next round
         END_IF;
         // trun is_polling to TRUE must be after ignoring check

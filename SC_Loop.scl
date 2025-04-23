@@ -1,6 +1,6 @@
 // 本代码由 S7_SCL_SRC_GEN 自动生成。author: goosy.jo@gmail.com
 // 配置文件: D:/codes/AS/S7-AS/CP_Poll/test.yaml
-// 摘要: 164bba97a74bba2e2d1764e4d2aedf16
+// 摘要: c247e529c5d740c347c885142830a92e
 
 FUNCTION_BLOCK "write_SC"
 TITLE='MB写命令'
@@ -108,12 +108,13 @@ STRUCT
     CP01 : ARRAY [0 .. 4] OF STRUCT //CP01 256 轮询命令数据
         enable         : BOOL := TRUE; // 允许本poll通讯
         pause          : BOOL ;        // 本 poll 通讯因通讯失败暂停，由程序自动维护
-        continuous     : BOOL := TRUE; // 不间断询问，默认为TRUE，为 FALSE 时由下方手动触发
-        is_modbus      : BOOL := TRUE; // 是否为modbus协议，默认为true
-        custom_trigger : BOOL ;        // 手动触发询问，当 continuous 为 FALSE 时有效
-        request        : BOOL ;        // 询问请求，仅 continuous 为 FALSE 时有效，它的上升沿置位 custom_trigger
-        request_fo     : BOOL ;        // 询问请求跟随，判断上升沿
-        timeout        : INT := 2000;  // 询问失败超时，超过时间标记本次通讯失败，单位毫秒
+        continuous     : BOOL := TRUE; // 不间断询问，默认为是，为否时由 periodicity 或 custom_trigger 决定
+        periodicity    : BOOL ;        // 固定周期询问，默认为否
+        is_modbus      : BOOL := TRUE; // 是否为modbus协议，默认为是
+        custom_trigger : BOOL ;        // 手动触发询问，当 continuous 和 periodicity 都为否时本标志触发询问
+        request        : BOOL ;        // 询问请求，当 continuous 和 periodicity 都为否时有效
+        request_fo     : BOOL ;        // 询问请求跟随，判断上升沿。上升沿时置位 custom_trigger
+        timeout        : INT := 2000;  // 询问超时或询问周期，单位毫秒。超过时间未正确回应标记询问失败
         send_DB        : INT ;         // 发送DB，为0时为本块
         send_start     : INT ;         // 发送DB起始地址
         recv_DB        : INT ;         // 接收DB
@@ -140,8 +141,8 @@ STRUCT
         CRC_L          : BYTE ;        //CRC
     END_STRUCT;
     p2_data : STRUCT
-        send_bytes     : INT := 7;     // 发送字节数
-        send_data : ARRAY  [0 .. 6] OF BYTE;    //发送数据
+        send_bytes     : INT := 8;     // 发送字节数
+        send_data : ARRAY  [0 .. 7] OF BYTE;    //发送数据
     END_STRUCT;
     p3_data : STRUCT
         send_bytes     : INT := 8;     // 发送字节数，modbus 默认为8。小于251
@@ -159,7 +160,8 @@ BEGIN
 
     // poll 0: 第1个poll modbus协议
     CP01[0].continuous := TRUE;
-    CP01[0].timeout := 2000;
+    CP01[0].periodicity := FALSE;
+    CP01[0].custom_trigger := FALSE;
     CP01[0].is_modbus := TRUE;
     CP01[0].send_DB := 880;
     CP01[0].send_start := 80;
@@ -172,9 +174,11 @@ BEGIN
     p0_data.address := W#16#0;
     p0_data.data := W#16#C;
 
-    // poll 1: 第2个poll 自定义发送时间
+    // poll 1: 第2个poll 周期发送
     CP01[1].continuous := FALSE;
-    CP01[1].timeout := 2000;
+    CP01[1].periodicity := TRUE;
+    CP01[1].custom_trigger := FALSE;
+    CP01[1].timeout := 1000;
     CP01[1].is_modbus := TRUE;
     CP01[1].send_DB := 880;
     CP01[1].send_start := 90;
@@ -188,26 +192,29 @@ BEGIN
     p1_data.data := W#16#C;
 
     // poll 2: 第3个poll 指定发送数据
-    CP01[2].continuous := TRUE;
-    CP01[2].timeout := 2000;
-    CP01[2].is_modbus := FALSE;
+    CP01[2].continuous := FALSE;
+    CP01[2].periodicity := FALSE;
+    CP01[2].custom_trigger := FALSE;
+    CP01[2].is_modbus := TRUE;
     CP01[2].send_DB := 880;
     CP01[2].send_start := 100;
     CP01[2].recv_DB := 53;
     CP01[2].recv_start := 64;
     // send data
-    p2_data.send_bytes := 7;
+    p2_data.send_bytes := 8;
     p2_data.send_data[0] := B#16#03;    //发送数据0
     p2_data.send_data[1] := B#16#03;    //发送数据1
     p2_data.send_data[2] := B#16#00;    //发送数据2
     p2_data.send_data[3] := B#16#00;    //发送数据3
-    p2_data.send_data[4] := B#16#18;    //发送数据4
-    p2_data.send_data[5] := B#16#8E;    //发送数据5
-    p2_data.send_data[6] := B#16#5D;    //发送数据6
+    p2_data.send_data[4] := B#16#00;    //发送数据4
+    p2_data.send_data[5] := B#16#0C;    //发送数据5
+    p2_data.send_data[6] := B#16#00;    //发送数据6
+    p2_data.send_data[7] := B#16#00;    //发送数据7
 
     // poll 3: 第4个poll 读取线圈
     CP01[3].continuous := TRUE;
-    CP01[3].timeout := 2000;
+    CP01[3].periodicity := FALSE;
+    CP01[3].custom_trigger := FALSE;
     CP01[3].is_modbus := TRUE;
     CP01[3].send_DB := 880;
     CP01[3].send_start := 110;
@@ -222,8 +229,8 @@ BEGIN
 
     // poll 4: 第5个poll 指定外部发送块
     CP01[4].continuous := FALSE;
+    CP01[4].periodicity := FALSE;
     CP01[4].custom_trigger := FALSE;
-    CP01[4].timeout := 2000;
     CP01[4].is_modbus := TRUE;
     CP01[4].send_DB := 32;
     CP01[4].send_start := 20;
@@ -238,7 +245,7 @@ FUNCTION "SC_Loop" : VOID
 "CP341_Poll"."CP01"(
     module_addr := 256,
     DATA        := "SC_polls_DB".CP01);
-"SC_polls_DB".CP01[1].request := "Clock_1Hz";
+"SC_polls_DB".CP01[2].request := "Clock_1Hz";
 "write_SC"."EDO02"(writing := "SC_polls_DB".CP01[4].custom_trigger);
 
 END_FUNCTION

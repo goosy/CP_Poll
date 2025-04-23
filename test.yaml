@@ -119,15 +119,17 @@ list : # CP 模块列表
   DB: [CP01, DB10]
   polls:
   - comment: 第1个poll modbus协议
-    unit_ID: 1
+    mode: continuous # 连续模式。可省略，默认模式
+    unit_ID: 1       # 有该参数时，表示该poll为modbus协议
     func_code: 3
     address: 0
     length: 12
     # 配置项允许16进制字符串
     recv_DB: rdata_SC
     recv_start: 0
-  - comment: 第2个poll 自定义发送时间
-    request: 'Clock_1Hz'
+  - comment: 第2个poll 周期发送
+    mode: periodicity  # 周期模式
+    timeout: 1000 # 指定同期，单位ms，默认 2000ms
     unit_ID: 2
     func_code: 4
     address: 0
@@ -135,9 +137,13 @@ list : # CP 模块列表
     recv_DB: rdata_SC
     recv_start: 32                     # 要注意开始地址不一样
   - comment: 第3个poll 指定发送数据
-    send_data: 03 03 00 00 18 8E 5D    # send_data 必须是一个由空格分隔的16进制字节的字符串
+    mode: custom # 指定为自定义模式，由用户控制发送
+    is_modbus: true # 指定为modbus协议，有 send_data 参数时默认为非modbus协议
+    send_data: 03 03 00 00 00 0C 00 00    # send_data 必须是一个由空格分隔的16进制字节的字符串
     recv_DB: rdata_SC
     recv_start: 64                     # 要注意开始地址不一样
+    extra_code: |- # 通过设置 request 来控制发送
+      "SC_polls_DB".CP01[2].request := "Clock_1Hz";
   - comment: 第4个poll 读取线圈
     unit_ID: 4
     func_code: 1
@@ -146,11 +152,11 @@ list : # CP 模块列表
     recv_DB: EDO02
     recv_start: 0
   - comment: 第5个poll 指定外部发送块
-    custom_trigger: false
+    mode: custom
     send_DB: EDO02
     send_start: 20
     recv_DB: EDO02
     recv_start: 8                     # 要注意开始地址不一样
-    extra_code: |-
+    extra_code: |- # 通过设置 custom_trigger 来控制发送
       "write_SC"."EDO02"(writing := "SC_polls_DB".CP01[4].custom_trigger);
 ...
