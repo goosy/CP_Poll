@@ -1,6 +1,6 @@
 FUNCTION_BLOCK "CP341_Poll"
 TITLE='485轮询'
-VERSION:'0.8'
+VERSION:'0.9'
 KNOW_HOW_PROTECT
 AUTHOR:Goosy
 NAME:SC
@@ -38,13 +38,13 @@ VAR
     poll_base : INT;             // 轮询区的起始偏移量
     poll_DB : INT;               // 轮询DB号
     w_poll_DB AT poll_DB: WORD ;
-    send_DB : INT;
+    send_DB : INT;               // 当前轮询发送块号
     w_send_DB AT send_DB: WORD ;
-    send_DBB : INT;
+    send_start : INT;            // 当前轮询发送偏移量
     send_length : INT;
-    recv_DB : INT;
+    recv_DB : INT;               // 当前轮询接收块号     (即当前发送对应的接收块)
     w_recv_DB AT recv_DB: WORD ;
-    recv_DBB : INT;
+    recv_start : INT;            // 当前轮询接收偏移量
     recv_length : INT;
     timeout : DINT;              // 单次询问的最大等待时间，超时则询问失败并转下一个询问
     PT AT timeout : TIME;
@@ -95,7 +95,7 @@ BEGIN
         // just for the frist polling
         poll_index := tmp_int;
         w_recv_DB := WORD_TO_BLOCK_DB(w_poll_DB).DW[offset + 8];
-        recv_DBB := WORD_TO_INT(WORD_TO_BLOCK_DB(w_poll_DB).DW[offset + 10]);
+        recv_start := WORD_TO_INT(WORD_TO_BLOCK_DB(w_poll_DB).DW[offset + 10]);
     END_IF;
 
     // Check request rising edge to set custom_trigger
@@ -157,15 +157,14 @@ BEGIN
                 tmp_int := try_times; // Set to try_times - 1 to allow access once
             ELSIF tmp_int > try_times THEN // Inquire failure times exceed the try_times value
                 WORD_TO_BLOCK_DB(w_poll_DB).DX[offset, 1] := TRUE;   // poll_pause
-                WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_DBB, 0] := FALSE; // 设置设备正常标志
-                WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_DBB, 1] := TRUE;  // 设置设备无效标志
-                WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_DBB, 2] := FALSE; // 设置设备收到数据标志
+                WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_start, 0] := FALSE; // 设置设备不正常标志
+                WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_start, 1] := TRUE;  // 设置设备无效标志
+                WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_start, 2] := FALSE; // 设置设备未收到数据标志
             END_IF;
             WORD_TO_BLOCK_DB(w_poll_DB).DW[offset + 14] := INT_TO_WORD(tmp_int);
         END_IF;
         // Reset the receive flag
-        WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_DBB, 2] := FALSE; // Set the device receive flag
-        WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_DBB, 3] := FALSE; // Set the device send flag
+        WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_start, 2] := FALSE; // Set the device receive flag
 
         // start new round
         poll_index := (poll_index + 1) MOD poll_length;
@@ -183,10 +182,12 @@ BEGIN
         END_IF;
         timeout := WORD_TO_DINT(WORD_TO_BLOCK_DB(w_poll_DB).DW[offset + 2]);
         w_send_DB := WORD_TO_BLOCK_DB(w_poll_DB).DW[offset + 4];
-        send_DBB := WORD_TO_INT(WORD_TO_BLOCK_DB(w_poll_DB).DW[offset + 6]) + 2;
-        send_length := WORD_TO_INT(WORD_TO_BLOCK_DB(w_send_DB).DW[send_DBB - 2]);
+        send_start := WORD_TO_INT(WORD_TO_BLOCK_DB(w_poll_DB).DW[offset + 6]) + 2;
+        send_length := WORD_TO_INT(WORD_TO_BLOCK_DB(w_send_DB).DW[send_start - 2]);
         w_recv_DB := WORD_TO_BLOCK_DB(w_poll_DB).DW[offset + 8];
-        recv_DBB := WORD_TO_INT(WORD_TO_BLOCK_DB(w_poll_DB).DW[offset + 10]);
+        recv_start := WORD_TO_INT(WORD_TO_BLOCK_DB(w_poll_DB).DW[offset + 10]);
+
+        WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_start, 3] := NOT poll_enable OR poll_pause; // Set the device pause flag
 
         // skip this round if not poll_enable or poll_pause
         // DON'T use REPEAT loop, which may cause an infinite loop.
@@ -198,10 +199,10 @@ BEGIN
         IF is_modbus THEN
             "CRC16"(
                 DB_NO     := send_DB,
-                DBB_Start := send_DBB,
+                DBB_Start := send_start,
                 DBB_Counts:= send_length - 2,
-                CRC_H     := WORD_TO_BLOCK_DB(w_send_DB).DB[send_DBB + send_length - 2],
-                CRC_L     := WORD_TO_BLOCK_DB(w_send_DB).DB[send_DBB + send_length - 1]);
+                CRC_H     := WORD_TO_BLOCK_DB(w_send_DB).DB[send_start + send_length - 2],
+                CRC_L     := WORD_TO_BLOCK_DB(w_send_DB).DB[send_start + send_length - 1]);
         END_IF;
     END_IF;
 
@@ -211,53 +212,52 @@ BEGIN
         REQ                      := send_trigger,
         LADDR                    := module_addr,
         DB_NO                    := send_DB,
-        DBB_NO                   := send_DBB,
+        DBB_NO                   := send_start,
         LEN                      := send_length,
         R_TYP                    := 'X');
-    WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_DBB, 3] := send_trigger; // 设置设备发送标志
 
     //接收功能
     receive (
         EN_R                     := recv_trigger,
         LADDR                    := module_addr,
         DB_NO                    := recv_DB,
-        DBB_NO                   := recv_DBB + 1);
+        DBB_NO                   := recv_start + 1);
 
     // 接收成功时处理
     on_receive := receive.NDR; // 非 modbus 接收成功标志
     IF on_receive AND is_modbus THEN // 对 modbus 接收附加接收成功标志判断
         // check func_code
-        send_byte := WORD_TO_BLOCK_DB(w_send_DB).DB[send_DBB + 1];
-        recv_byte := WORD_TO_BLOCK_DB(w_recv_DB).DB[recv_DBB + 2];
+        send_byte := WORD_TO_BLOCK_DB(w_send_DB).DB[send_start + 1];
+        recv_byte := WORD_TO_BLOCK_DB(w_recv_DB).DB[recv_start + 2];
         on_receive := send_byte = recv_byte;
         IF BYTE_TO_INT(send_byte) > 4 THEN // 05 06 15 16 功能
             recv_length := 6;
         ELSE // 01 02 03 04 功能
-            recv_length := BYTE_TO_INT(WORD_TO_BLOCK_DB(w_recv_DB).DB[recv_DBB + 3]) + 3;
+            recv_length := BYTE_TO_INT(WORD_TO_BLOCK_DB(w_recv_DB).DB[recv_start + 3]) + 3;
         END_IF;
         // check device_ID
-        send_byte := WORD_TO_BLOCK_DB(w_send_DB).DB[send_DBB];
-        recv_byte := WORD_TO_BLOCK_DB(w_recv_DB).DB[recv_DBB + 1];
+        send_byte := WORD_TO_BLOCK_DB(w_send_DB).DB[send_start];
+        recv_byte := WORD_TO_BLOCK_DB(w_recv_DB).DB[recv_start + 1];
         on_receive := on_receive AND send_byte = recv_byte;
         // CRC
         "CRC16"(
             DB_NO     := recv_DB,
-            DBB_Start := recv_DBB + 1,
+            DBB_Start := recv_start + 1,
             DBB_Counts:= recv_length,
             CRC_H     := CRC_H,
             CRC_L     := CRC_L);
         on_receive := on_receive
-            AND CRC_H = WORD_TO_BLOCK_DB(w_recv_DB).DB[recv_DBB + recv_length + 1]
-            AND CRC_L = WORD_TO_BLOCK_DB(w_recv_DB).DB[recv_DBB + recv_length + 2];
+            AND CRC_H = WORD_TO_BLOCK_DB(w_recv_DB).DB[recv_start + recv_length + 1]
+            AND CRC_L = WORD_TO_BLOCK_DB(w_recv_DB).DB[recv_start + recv_length + 2];
     END_IF;
-    WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_DBB,2] := on_receive; // 设置设备接收标志
+    WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_start,2] := on_receive; // 设置设备接收标志
 
     IF on_receive THEN // 接收成功
         WORD_TO_BLOCK_DB(w_poll_DB).DW[offset + 14] := W#16#0; //wait_count
-        WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_DBB, 0] := TRUE; // 设备正常标志
-        WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_DBB, 1] := FALSE; // 设备错误标志
+        WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_start, 0] := TRUE; // 设备正常标志
+        WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_start, 1] := FALSE; // 设备错误标志
     ELSIF receive.NDR THEN // 有接收数据但不成功
-        WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_DBB, 0] := FALSE; // 设备正常标志
-        WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_DBB, 1] := TRUE; // 设备错误标志;
+        WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_start, 0] := FALSE; // 设备正常标志
+        WORD_TO_BLOCK_DB(w_recv_DB).DX[recv_start, 1] := TRUE; // 设备错误标志;
     END_IF;
 END_FUNCTION_BLOCK

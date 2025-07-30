@@ -18,6 +18,7 @@ includes: |
         r_work_F : BOOL ;                  // 设备正常指示
         r_invalid : BOOL ;                 // 设备无效指示
         r_on_receive : BOOL ;              // 设备接收指示
+        r_pause : BOOL ;                   // 设备暂停指示
         r_unit_ID : BYTE ;                 // 设备号
         r_func_code : BYTE ;               // modbus功能号
         r_length : BYTE ;                  // 接收长度
@@ -28,6 +29,7 @@ includes: |
         w_work_F : BOOL ;                  // 设备正常指示
         w_invalid : BOOL ;                 // 设备无效指示
         w_on_receive : BOOL ;              // 设备接收指示
+        w_pause : BOOL ;                   // 设备暂停指示
         w_unit_ID : BYTE ;                 // 设备号
         w_func_code : BYTE ;               // modbus功能号
         start_H : BYTE ;                   // 写起始高字节
@@ -69,46 +71,50 @@ includes: |
     // 建议一个设备只定义在一个DB中，本例一个DB定义多个设备仅为了展示可以这样组织
     DATA_BLOCK "rdata_SC"
     STRUCT
-        device0_workOK : BOOL;  //设备正常指示 0
-        device0_error : BOOL; //设备错误指示
-        device0_on_receive : BOOL; //设备接收指示
-        device0_deviceID : BYTE; //设备号
-        device0_funcNo : BYTE;  //modbus功能号
-        device0_len : BYTE; //长度
-        device0_data : ARRAY[4..31] OF BYTE; //数值
-        device1_workOK : BOOL;  //设备正常指示
-        device1_error : BOOL; //设备错误指示
-        device1_on_receive : BOOL; //设备接收指示
-        device1_deviceID : BYTE; //设备号
-        device1_funcNo : BYTE;  //modbus功能号
-        device1_len : BYTE; //长度
-        device1_data : ARRAY[36..63] OF BYTE; //数值
-        device2_workOK : BOOL;  //设备正常指示
-        device2_error : BOOL; //设备错误指示
-        device2_on_receive : BOOL; //设备接收指示
-        device2_deviceID : BYTE; //设备号
-        device2_funcNo : BYTE;  //modbus功能号
-        device2_len : BYTE; //长度
-        device2_data : ARRAY[68..95] OF BYTE; //数值
-        device3_workOK : BOOL;  //设备正常指示
-        device3_error : BOOL; //设备错误指示
-        device3_on_receive : BOOL; //设备接收指示
+        device0_workOK : BOOL;                 // 设备正常指示 0
+        device0_error : BOOL;                  // 设备错误指示
+        device0_on_receive : BOOL;             // 设备接收指示
+        device0_pause : BOOL ;                 // 设备暂停指示
+        device0_deviceID : BYTE;               // 设备号
+        device0_funcNo : BYTE;                 // modbus功能号
+        device0_len : BYTE;                    // 长度
+        device0_data : ARRAY[4..31] OF BYTE;   // 数值
+        device1_workOK : BOOL;                 // 设备正常指示 1
+        device1_error : BOOL;                  // 设备错误指示
+        device1_on_receive : BOOL;             // 设备接收指示
+        device1_pause : BOOL ;                 // 设备暂停指示
+        device1_deviceID : BYTE;               // 设备号
+        device1_funcNo : BYTE;                 // modbus功能号
+        device1_len : BYTE;                    // 长度
+        device1_data : ARRAY[36..63] OF BYTE;  // 数值
+        device2_workOK : BOOL;                 // 设备正常指示
+        device2_error : BOOL;                  // 设备错误指示
+        device2_on_receive : BOOL;             // 设备接收指示
+        device2_pause : BOOL ;                 // 设备暂停指示
+        device2_deviceID : BYTE;               // 设备号
+        device2_funcNo : BYTE;                 // modbus功能号
+        device2_len : BYTE;                    // 长度
+        device2_data : ARRAY[68..95] OF BYTE;  // 数值
+        device3_workOK : BOOL;                 // 设备正常指示
+        device3_error : BOOL;                  // 设备错误指示
+        device3_on_receive : BOOL;             // 设备接收指示
+        device3_pause : BOOL ;                 // 设备暂停指示
         device3_data0 : BYTE;
-        device3_data : ARRAY[98..127] OF BYTE; //数值
-        device4_workOK : BOOL;  //设备正常指示 30
-        device4_error : BOOL; //设备错误指示
-        device4_on_receive : BOOL; //设备接收指示
+        device3_data : ARRAY[98..127] OF BYTE; // 数值
+        device4_workOK : BOOL;                 // 设备正常指示 30
+        device4_error : BOOL;                  // 设备错误指示
+        device4_on_receive : BOOL;             // 设备接收指示
+        device4_pause : BOOL ;                 // 设备暂停指示
         device4_data0 : BYTE;
-        device4_data : ARRAY[130..159] OF BYTE; //数值
+        device4_data : ARRAY[130..159] OF BYTE; // 数值
     END_STRUCT;
     BEGIN
     END_DATA_BLOCK
 
 symbols:
 - [SC_polls_DB, DB880]
-- [count, MW20, INT]
 - [CRC16, FC16, ~, modbus CRC16 校验]
-- [write_SC, FB811]
+- [write_SC, FB813]
 - [rdata_SC, DB53]
 - [EDO02, DB32, write_SC]
 
